@@ -3,35 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Control Renacer | Dashboard Ejecutivo</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <title>Sistema de Control Renacer v25.2 | Auditoría Integral</title>
     <style>
         :root {
-            --primary: #1a0e2a; /* El morado oscuro de tu logo */
-            --gold: #c8a951;    /* El dorado corporativo */
-            --bg: #f8f9fa;
+            --jr-dark: #1a0e2a; 
+            --jr-gold: #c8a951;
+            --jr-gold-light: #e2d5b0;
+            --jr-green: #008f4c;
+            --jr-red: #d93025;
+            --jr-bg: #f4f7f6;
         }
-        body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg); color: var(--primary); display: flex; align-items: center; justify-content: center; height: 100vh; }
-        .card { background: white; padding: 3rem; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); text-align: center; max-width: 500px; border-top: 5px solid var(--gold); }
-        h1 { font-weight: 600; margin-bottom: 0.5rem; }
-        p { color: #666; margin-bottom: 2rem; line-height: 1.6; }
-        .btn { 
-            background: var(--primary); color: white; padding: 15px 35px; border-radius: 12px; 
-            text-decoration: none; font-weight: 600; display: inline-block; transition: all 0.3s;
-            border: 1px solid var(--primary);
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background-color: var(--jr-bg); color: #333; padding-bottom: 50px; }
+
+        /* HEADER PROFESIONAL */
+        .header {
+            background-color: var(--jr-dark);
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            border-bottom: 4px solid var(--jr-gold);
         }
-        .btn:hover { background: var(--gold); border-color: var(--gold); transform: translateY(-3px); }
-        .footer { margin-top: 2rem; font-size: 0.8rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        .header img { width: 60px; height: 60px; margin-right: 20px; background: white; border-radius: 50%; padding: 5px; object-fit: contain; }
+        .header-text h1 { font-size: 24px; font-weight: 700; color: white; margin-bottom: 4px; }
+        .header-text p { font-size: 13px; color: var(--jr-gold-light); opacity: 0.9; }
+
+        /* BOTÓN DASHBOARD GERENCIAL */
+        .btn-dashboard {
+            margin-left: auto;
+            background-color: var(--jr-gold);
+            color: var(--jr-dark);
+            padding: 12px 25px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
+            border: 2px solid var(--jr-gold);
+        }
+        .btn-dashboard:hover { background: transparent; color: var(--jr-gold); transform: translateY(-2px); }
+
+        .container { max-width: 1400px; margin: 30px auto; padding: 0 20px; }
+
+        /* ESTILO CARDS CARGA */
+        .upload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .drop-card {
+            background: white;
+            border: 2px dashed #ddd;
+            border-radius: 15px;
+            padding: 35px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.3s;
+            position: relative;
+        }
+        .drop-card:hover { border-color: var(--jr-gold); background: #fffcf5; transform: translateY(-5px); }
+        .drop-card i { font-size: 40px; display: block; margin-bottom: 15px; }
+        .drop-card h3 { font-size: 16px; color: var(--jr-dark); }
+        .drop-ok { color: var(--jr-green); font-weight: 800; font-size: 13px; margin-top: 10px; display: block; }
+        input[type="file"] { display: none; }
+
+        .btn-main {
+            width: 100%;
+            background-color: var(--jr-dark);
+            color: var(--jr-gold);
+            border: none;
+            padding: 18px;
+            font-size: 15px;
+            font-weight: 800;
+            text-transform: uppercase;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+            transition: 0.3s;
+        }
+        .btn-main:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+        .btn-main:hover:not(:disabled) { background: #2a1b3d; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+        /* TABLAS Y RESULTADOS (Sigue tu lógica original corregida) */
+        .table-container { background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background-color: var(--jr-dark); color: var(--jr-gold-light); }
+        th { padding: 18px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+        td { padding: 16px; border-bottom: 1px solid #eee; font-size: 13px; }
+        
+        .chip-nov { background: var(--jr-red); color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+        .chip-ok { background: var(--jr-green); color: white; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+        
+        /* MODAL */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; padding: 40px; overflow-y: auto; }
+        .modal-overlay.open { display: flex; justify-content: center; align-items: flex-start; }
+        .modal-content { background: #fff; width: 100%; max-width: 1200px; border-radius: 20px; overflow: hidden; box-shadow: 0 50px 100px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div style="font-size: 50px; margin-bottom: 20px;">📊</div>
-        <h1>Auditoría Integral</h1>
-        <p>Bienvenido al Sistema de Control de Calidad Renacer. Panel optimizado para la toma de decisiones gerenciales y análisis de operatividad funeraria.</p>
-        <!-- REEMPLAZA LA URL DE ABAJO CON LA QUE TE DE STREAMLIT DESPUÉS -->
-        <a href="https://tu-app-analisis.streamlit.app" class="btn">INGRESAR AL DASHBOARD</a>
-        <div class="footer">Jardines del Renacer © 2024</div>
+
+<div class="header">
+    <img src="https://i.ibb.co/3ykS8mS/JR-Logo.png" alt="JR Logo">
+    <div class="header-text">
+        <h1>Sistema de Control Renacer</h1>
+        <p>Portal de Auditoría Integral v25.2 | Control de Calidad</p>
     </div>
+    
+    <!-- ENLACE AL DASHBOARD (Reemplaza la URL después) -->
+    <a href="https://tu-app-analisis.streamlit.app" target="_blank" class="btn-dashboard">
+        <span>📊 VER DASHBOARD DE GRÁFICAS</span>
+        <strong style="font-size: 18px;">→</strong>
+    </a>
+</div>
+
+<div class="container">
+    <div class="upload-grid">
+        <div class="drop-card" onclick="document.getElementById('f1').click()">
+            <i>📋</i>
+            <h3>Reporte de Servicios</h3>
+            <span id="ok1" class="drop-ok" style="display:none">✔ ARCHIVO LISTO</span>
+            <input type="file" id="f1" accept=".csv, .txt">
+        </div>
+        <div class="drop-card" onclick="document.getElementById('f2').click()">
+            <i>💰</i>
+            <h3>Reporte de Gastos</h3>
+            <span id="ok2" class="drop-ok" style="display:none">✔ ARCHIVO LISTO</span>
+            <input type="file" id="f2" accept=".csv, .txt">
+        </div>
+        <div class="drop-card" onclick="document.getElementById('f3').click()">
+            <i>📞</i>
+            <h3>Llamadas de Satisfacción</h3>
+            <span id="ok3" class="drop-ok" style="display:none">✔ ARCHIVO LISTO</span>
+            <input type="file" id="f3" accept=".csv, .txt">
+        </div>
+    </div>
+
+    <button class="btn-main" id="btn-anal" disabled onclick="analizar()">INICIAR ANÁLISIS DE AUDITORÍA →</button>
+
+    <div id="results" style="display:none">
+        <!-- Aquí se inyectan tus resultados de JS -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID Prestación</th>
+                        <th>Fecha Solicitud</th>
+                        <th>Nombre Fallecido</th>
+                        <th>Regional</th>
+                        <th>Estado</th>
+                        <th>Observaciones de Auditoría</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // PEGA AQUÍ TODO TU CÓDIGO JAVASCRIPT ORIGINAL (El que ya tienes funcionando)
+    // Asegúrate de incluir las funciones analizar(), render(), detectarNovedades(), etc.
+</script>
+
 </body>
 </html>
