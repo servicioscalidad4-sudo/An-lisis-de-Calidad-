@@ -1,0 +1,650 @@
+Aquí tienes el código completo y unificado del componente `Dashboard`. He integrado las correcciones del parseo cronológico para que procese correctamente las fechas y horas específicas de tu archivo (`Mayo 19 pisco.csv`), evitando falsos positivos de errores y asegurando que las columnas se mapeen de forma automática.
+
+Puedes copiar y pegar este código directamente en tu archivo de React:
+
+```jsx
+import { useState, useCallback } from "react";
+
+// ── HELPERS CORREGIDOS Y OPTIMIZADOS ──────────────────────────────────────────
+function applyMeridiem(hour, meridiem) {
+  if (!meridiem) return hour;
+  const isPM = /p/i.test(meridiem);
+  const isAM = /a/i.test(meridiem);
+  if (isPM && hour < 12) return hour + 12;
+  if (isAM && hour === 12) return 0;
+  return hour;
+}
+
+function parseDateTime(val, refDate) {
+  if (!val) return null;
+  val = String(val).trim();
+  if (!val) return null;
+  
+  // Limpieza de caracteres invisibles y normalización de espacios redundantes
+  val = val.replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim();
+
+  // ADAPTACIÓN PARA HORARECOGIDASERVICIO (ej: "2026/05/24 01:50:00 P.M")
+  // Si viene una fecha antes de la hora, extraemos solo el componente temporal final
+  if (val.includes("/") || val.includes("-")) {
+    const spaceIdx = val.lastIndexOf(" ");
+    if (spaceIdx !== -1) {
+      const maybeTime = val.slice(spaceIdx + 1);
+      // Si el último fragmento es un meridiano (A.M/P.M), tomamos también la hora anterior
+      if (/^[aApP]\.?[mM]\.?$/.test(maybeTime)) {
+        const firstSpaceIdx = val.slice(0, spaceIdx).lastIndexOf(" ");
+        if (firstSpaceIdx !== -1) {
+          val = val.slice(firstSpaceIdx + 1);
+        }
+      } else {
+        val = val.slice(spaceIdx + 1);
+      }
+    }
+  }
+
+  // DD/MM/YYYY HH:MM[:SS][.ms] [am/pm]
+  let m = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,]\d+)?\s*([aApP]\.?[mM]\.?)?/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1], applyMeridiem(+m[4], m[7]), +m[5], +(m[6]||0));
+
+  // YYYY-MM-DD HH:MM[:SS][.ms] o con T separator
+  m = val.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[\sT](\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,]\d+)?\s*([aApP]\.?[mM]\.?)?/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3], applyMeridiem(+m[4], m[7]), +m[5], +(m[6]||0));
+
+  // DD/MM/YYYY únicamente
+  m = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+
+  // YYYY-MM-DD únicamente
+  m = val.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+
+  // HH:MM o HH:MM:SS [am/pm] (Formatos de hora pura)
+  m = val.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,]\d+)?\s*([aApP]\.?[mM]\.?)?$/);
+  if (m) {
+    const base = refDate ? new Date(refDate) : new Date();
+    base.setHours(applyMeridiem(+m[1], m[4]), +m[2], +(m[3]||0), 0);
+    return base;
+  }
+
+  // Último recurso con reemplazo preventivo de puntos en el meridiano
+  const nativeTarget = val.replace(/\./g, "");
+  const d = new Date(nativeTarget);
+  return isNaN(d) ? null : d;
+}
+
+const ES_MONTHS = {
+  ene:0, feb:1, mar:2, abr:3, may:4, jun:5,
+  jul:6, ago:7, sep:8, oct:9, nov:10, dic:11
+};
+
+function parseSpanishDate(val) {
+  if (!val) return null;
+  val = String(val).trim();
+  // Formato DD-MMM.-YY o DD-MMM-YY (ej: "14-may.-26" o "26-oct.-19")
+  const m = val.match(/^(\d{1,2})-([a-záéíóúü]+)\.?-(\d{2,4})$/i);
+  if (!m) return null;
+  const mon = ES_MONTHS[m[2].toLowerCase().slice(0,3)];
+  if (mon === undefined) return null;
+  
+  // Pivotamos los años de 2 dígitos de forma segura al siglo actual (2000+)
+  const yr = +m[3] < 100 ? 2000 + +m[3] : +m[3];
+  return new Date(yr, mon, +m[1]);
+}
+
+function parseDatePlusTime(dateVal, timeVal) {
+  let base = parseDateTime(dateVal);
+  if (!base) base = parseSpanishDate(dateVal);
+  if (!base) return null;
+  if (!timeVal || !String(timeVal).trim()) return base;
+  const t = parseDateTime(String(timeVal).trim(), base);
+  return t || base;
+}
+
+function diffHours(a, b) {
+  if (!a || !b) return null;
+  return (b - a) / 3600000;
+}
+
+function fmtDate(d) {
+  if (!d) return "—";
+  return d.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+}
+
+function splitCSVLine(line, delim) {
+  const result = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i+1] === '"') { cur += '"'; i++; } 
+        else inQ = false;
+      } else {
+        cur += ch;
+      }
+    } else {
+      if (ch === '"') { inQ = true; }
+      else if (ch === delim) { result.push(cur.trim()); cur = ""; }
+      else { cur += ch; }
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseCSV(text) {
+  const rawLines = text.split(/\r?\n/);
+  const lines = [];
+  let buf = "";
+  let openQuotes = 0;
+  for (const l of rawLines) {
+    for (const ch of l) { if (ch === '"') openQuotes++; }
+    buf = buf ? buf + " " + l : l;
+    if (openQuotes % 2 === 0) { if (buf.trim()) lines.push(buf); buf = ""; openQuotes = 0; }
+  }
+  if (buf.trim()) lines.push(buf);
+
+  if (!lines.length) return [];
+  const delim = lines[0].includes(";") ? ";" : ",";
+  const headers = splitCSVLine(lines[0], delim).map(h => h.replace(/^"|"$/g, "").trim());
+  return lines.slice(1).map(line => {
+    const vals = splitCSVLine(line, delim).map(v => v.replace(/^"|"$/g, "").trim());
+    const row = {};
+    headers.forEach((h, i) => { row[h] = vals[i] !== undefined ? vals[i] : ""; });
+    return row;
+  });
+}
+
+function findCol(headers, candidates) {
+  for (const c of candidates) {
+    const found = headers.find(h => h.toLowerCase().replace(/\s/g,"").includes(c.toLowerCase().replace(/\s/g,"")));
+    if (found) return found;
+  }
+  return null;
+}
+
+function analyzeRow(row, cols) {
+  const get = key => (cols[key] ? row[cols[key]] : "") || "";
+  const novedades = [];
+
+  const fechaSolic   = parseDateTime(get("fechaSolicitud"));
+  const fechaDigit   = parseDateTime(get("fechaDigitacion"));
+  const horaRecogRaw = get("horaRecogida");
+  const horaRecog    = parseDateTime(horaRecogRaw, fechaSolic);
+
+  const fechaEntrada = parseDatePlusTime(get("fechaEntrada"), get("horaEntrada"));
+
+  const tipo = get("tipo").trim();
+  const esAfiliado = /afiliado/i.test(tipo);
+
+  const hospital        = get("hospitalFallec").trim();
+  const tipoDeMuerte    = get("tipoDeMuerte").trim();
+  const ciudadMuerte    = get("ciudadMuerte").trim().toLowerCase();
+  const ciudadSede      = get("municipioPrestacion").trim().toLowerCase();
+  const enMedicinaLegal  = /medicina\s*legal|medilegal/i.test(hospital) || /fiscali/i.test(hospital);
+  const muerteViolenta   = /violenta/i.test(tipoDeMuerte);
+  const trasladoIntermunic = ciudadMuerte && ciudadSede && ciudadMuerte !== ciudadSede;
+  const casoEspecial     = enMedicinaLegal || muerteViolenta || trasladoIntermunic;
+  const razones = [];
+  if (enMedicinaLegal)   razones.push(`Medicina Legal (${hospital})`);
+  else if (muerteViolenta) razones.push("Muerte violenta — posible retención en Medicina Legal");
+  if (trasladoIntermunic) razones.push(`Traslado intermunicipal (${get("ciudadMuerte").trim()} → ${get("municipioPrestacion").trim()})`);
+  const razonEspecial = razones.join(" · ");
+
+  // E0 — Sin hora de recogida
+  if (!horaRecogRaw.trim() || !horaRecog) {
+    const rawInfo = horaRecogRaw ? ` (valor: "${horaRecogRaw}")` : "";
+    novedades.push({ tipo: "ERROR", codigo: "E0", msg: `Sin hora de recogida registrada${rawInfo}` });
+  }
+
+  // E1 — Recogida antes de solicitud
+  if (fechaSolic && horaRecog) {
+    const h = diffHours(fechaSolic, horaRecog);
+    if (h < 0) {
+      novedades.push({ tipo: "ERROR", codigo: "E1", msg: `Recogida ANTES de la solicitud (${Math.abs(h).toFixed(1)}h antes)` });
+    }
+    // T1 — Recogida tardía > 3h
+    if (h !== null && h > 3) {
+      novedades.push({ tipo: "TARDÍO", codigo: "T1", msg: `Recogida tardía — ${h.toFixed(1)}h después de solicitud (límite 3h)` });
+    }
+  }
+
+  // E2/A1 — Digitación
+  if (fechaSolic && fechaDigit) {
+    const h = diffHours(fechaSolic, fechaDigit);
+    if (h !== null && h < 0) {
+      novedades.push({ tipo: "ERROR", codigo: "E3", msg: `Digitación ANTES de la solicitud (${Math.abs(h).toFixed(1)}h antes)` });
+    } else if (h !== null && h > 24) {
+      novedades.push({ tipo: "ERROR", codigo: "E2", msg: `Digitación muy tardía — ${h.toFixed(1)}h (límite 24h)` });
+    } else if (h !== null && h > 12) {
+      novedades.push({ tipo: "ALERTA", codigo: "A1", msg: `Digitación tardía — ${h.toFixed(1)}h (recomendado < 12h)` });
+    }
+  }
+
+  // E4/E5/A2/I1 — Entrada a velación
+  if (esAfiliado && horaRecog && fechaEntrada) {
+    const h = diffHours(horaRecog, fechaEntrada);
+    if (h !== null && h < 0) {
+      novedades.push({ tipo: "ERROR", codigo: "E4", msg: `Entrada ANTES de la recogida (${Math.abs(h).toFixed(1)}h antes)` });
+    } else if (h !== null && h > 5) {
+      if (casoEspecial) {
+        novedades.push({ tipo: "INFO", codigo: "I1", msg: `Entrada tardía — ${h.toFixed(1)}h — Justificado: ${razonEspecial}` });
+      } else {
+        const entradaHora = fechaEntrada.getHours() + fechaEntrada.getMinutes()/60;
+        const recogidaHora = horaRecog.getHours() + horaRecog.getMinutes()/60;
+        const esMañana = recogidaHora < 12;
+        if (esMañana && entradaHora > 8 && fechaEntrada.getDate() !== horaRecog.getDate()) {
+          novedades.push({ tipo: "ERROR", codigo: "E5", msg: `Entrada muy tardía para recogida matutina — ${h.toFixed(1)}h` });
+        } else {
+          novedades.push({ tipo: "ALERTA", codigo: "A2", msg: `Entrada tardía — ${h.toFixed(1)}h después de recogida (límite 5h)` });
+        }
+      }
+    }
+  }
+
+  return { novedades, fechaSolic, fechaDigit, horaRecog, fechaEntrada, esAfiliado, casoEspecial, razonEspecial };
+}
+
+// ── BADGE ─────────────────────────────────────────────────────────────────────
+const BADGE_STYLES = {
+  ERROR:  { bg: "#3b0d0d", color: "#f87171", border: "#7f1d1d" },
+  TARDÍO: { bg: "#1c1200", color: "#fbbf24", border: "#78350f" },
+  ALERTA: { bg: "#1a1600", color: "#facc15", border: "#713f12" },
+  INFO:   { bg: "#0a1628", color: "#60a5fa", border: "#1e3a5f" },
+  OK:     { bg: "#052e16", color: "#34d399", border: "#064e3b" },
+};
+
+function Badge({ tipo }) {
+  const s = BADGE_STYLES[tipo] || BADGE_STYLES.OK;
+  return (
+    <span style={{
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+      fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+      letterSpacing: .5, whiteSpace: "nowrap",
+    }}>{tipo}</span>
+  );
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function Modal({ item, cols, onClose }) {
+  if (!item) return null;
+  const { row, novedades, fechaSolic, fechaDigit, horaRecog, fechaEntrada } = item;
+  const obs = cols?.observaciones ? row[cols.observaciones] : "";
+  const nro = cols?.numeroPrestacion ? row[cols.numeroPrestacion] : "—";
+  const rawHoraRecog = cols?.horaRecogida ? row[cols.horaRecogida] : "";
+
+  const knownCols = new Set(Object.values(cols || {}).filter(Boolean));
+  const extraCols = Object.entries(row).filter(([k, v]) =>
+    !knownCols.has(k) && v && String(v).trim()
+  );
+
+  const worst = novedades.some(n => n.tipo === "ERROR") ? "ERROR"
+              : novedades.some(n => n.tipo === "TARDÍO") ? "TARDÍO"
+              : novedades.some(n => n.tipo === "ALERTA") ? "ALERTA"
+              : "OK";
+  const bs = BADGE_STYLES[worst];
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "#13151f", border: `1px solid ${bs.border}`,
+        borderRadius: 16, width: "100%", maxWidth: 580,
+        boxShadow: `0 0 60px ${bs.bg}, 0 20px 60px rgba(0,0,0,.5)`,
+        display: "flex", flexDirection: "column",
+        maxHeight: "90vh", overflow: "hidden",
+      }}>
+        <div style={{
+          background: bs.bg, borderBottom: `1px solid ${bs.border}`,
+          padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          flexShrink: 0,
+        }}>
+          <div>
+            <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: 1, marginBottom: 2 }}>N° PRESTACIÓN</div>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 19, fontWeight: 800, color: "#fff" }}>{nro}</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Badge tipo={worst} />
+            <button onClick={onClose} style={{
+              background: "rgba(255,255,255,.1)", border: "none", color: "#94a3b8",
+              width: 28, height: 28, borderRadius: 6, cursor: "pointer", fontSize: 14,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ overflowY: "auto", flex: 1 }}>
+          <div style={{ padding: "14px 18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, borderBottom: "1px solid #1e2235" }}>
+            {[
+              { label: "Fecha Solicitud",  val: fmtDate(fechaSolic),   raw: cols?.fechaSolicitud  ? row[cols.fechaSolicitud]  : "", icon: "📅" },
+              { label: "Fecha Digitación", val: fmtDate(fechaDigit),   raw: cols?.fechaDigitacion ? row[cols.fechaDigitacion] : "", icon: "⌨️" },
+              { label: "Hora Recogida",    val: horaRecog ? fmtDate(horaRecog) : null, raw: rawHoraRecog, icon: "🚐", missing: !horaRecog },
+              { label: "Entrada Velación", val: fmtDate(fechaEntrada), raw: [cols?.fechaEntrada ? row[cols.fechaEntrada] : "", cols?.horaEntrada ? row[cols.horaEntrada] : ""].filter(Boolean).join(" "), icon: "🏥" },
+            ].map(f => (
+              <div key={f.label} style={{
+                background: f.missing ? "#2d0a0a" : "#0d0f19",
+                border: f.missing ? "1px solid #7f1d1d" : "1px solid transparent",
+                borderRadius: 8, padding: "10px 12px",
+              }}>
+                <div style={{ fontSize: 9, color: f.missing ? "#f87171" : "#6b7280", marginBottom: 4 }}>{f.icon} {f.label}</div>
+                {f.missing
+                  ? <div>
+                      <div style={{ fontSize: 12, color: "#f87171", fontWeight: 700 }}>⚠ SIN HORA</div>
+                      {f.raw && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 3 }}>Valor en archivo: <span style={{color:"#fca5a5"}}>{f.raw}</span></div>}
+                    </div>
+                  : <div>
+                      <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 500 }}>{f.val || "—"}</div>
+                      {f.raw && f.raw !== f.val && <div style={{ fontSize: 10, color: "#4b5563", marginTop: 2 }}>{f.raw}</div>}
+                    </div>
+                }
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding: "12px 18px", borderBottom: (obs || extraCols.length > 0) ? "1px solid #1e2235" : "none" }}>
+            <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: 1, marginBottom: 8 }}>NOVEDADES DETECTADAS</div>
+            {novedades.length === 0
+              ? <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#34d399", fontSize: 12 }}>
+                  ✅ Sin novedades — registro correcto
+                </div>
+              : <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {novedades.map((n, i) => {
+                    const ns = BADGE_STYLES[n.tipo];
+                    return (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "flex-start", gap: 8,
+                        background: ns.bg, border: `1px solid ${ns.border}`,
+                        borderRadius: 8, padding: "8px 10px",
+                      }}>
+                        <Badge tipo={n.tipo} />
+                        <div>
+                          <span style={{ color: ns.color, fontWeight: 700, fontSize: 10 }}>{n.codigo}</span>
+                          <span style={{ color: "#cbd5e1", fontSize: 11, marginLeft: 6 }}>{n.msg}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+            }
+          </div>
+
+          {obs && (
+            <div style={{ padding: "12px 18px", borderBottom: extraCols.length > 0 ? "1px solid #1e2235" : "none" }}>
+              <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: 1, marginBottom: 6 }}>💬 OBSERVACIONES</div>
+              <div style={{
+                background: "#1c1a00", border: "1px solid #713f12",
+                borderRadius: 8, padding: "10px 12px",
+                color: "#fcd34d", fontSize: 12, lineHeight: 1.7,
+              }}>{obs}</div>
+            </div>
+          )}
+
+          {extraCols.length > 0 && (
+            <div style={{ padding: "12px 18px" }}>
+              <div style={{ fontSize: 9, color: "#6b7280", letterSpacing: 1, marginBottom: 8 }}>DATOS ADICIONALES</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {extraCols.map(([k, v]) => (
+                  <div key={k} style={{ background: "#0d0f19", borderRadius: 6, padding: "7px 10px" }}>
+                    <div style={{ fontSize: 9, color: "#6b7280", marginBottom: 2, textTransform: "uppercase", letterSpacing: .5 }}>{k}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{String(v)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN DASHBOARD ────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const [rows, setRows]       = useState([]);
+  const [cols, setCols]       = useState(null);
+  const [filter, setFilter]   = useState("TODOS");
+  const [search, setSearch]   = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [colError, setColError] = useState("");
+  const [selected, setSelected] = useState(null);
+
+  const processFile = useCallback((file) => {
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const parsed = parseCSV(text);
+      if (!parsed.length) { setColError("El archivo no tiene datos."); return; }
+      const headers = Object.keys(parsed[0]);
+      const colMap = {
+        numeroPrestacion: findCol(headers, ["NUMEROPRESTACION","numeroprestacion","NRO_PRESTACION","num_prestacion","numero"]),
+        fechaSolicitud:   findCol(headers, ["FECHASOLICITUD","fechasolicitud","FECHA_SOLICITUD","fecha_solicitud"]),
+        fechaDigitacion:  findCol(headers, ["FECHADIGITACION","fechadigitacion","FECHA_DIGITACION","fecha_digitacion"]),
+        horaRecogida:     findCol(headers, ["HORARECOGIDASERVICIO","horarecogidaservicio","HORA_RECOGIDA","hora_recogida","HoraRecogida"]),
+        fechaEntrada:     findCol(headers, ["FECHAENTRADA","fechaentrada","FECHA_ENT_RA","FECHA_ENTRADA"]),
+        horaEntrada:      findCol(headers, ["HORAENTRADA","horaentrada","HORA_ENT_RA","HORA_ENTRADA"]),
+        tipo:             findCol(headers, ["TIPO","tipo","TipoServicio","tiposervicio","TIPO_SERVICIO"]),
+        hospitalFallec:   findCol(headers, ["HOSPITALFALLECIMIENTO","hospitalfallecimiento","HOSPITAL_FALLECIMIENTO"]),
+        tipoDeMuerte:     findCol(headers, ["TIPODEMUERTE","tipodemuerte","TIPO_MUERTE"]),
+        ciudadMuerte:     findCol(headers, ["CIUDADMUERTE","ciudadmuerte","CIUDAD_MUERTE"]),
+        municipioPrestacion: findCol(headers, ["MUNICIPIOPRESTACION","municipioprestacion","MUNICIPIO_PRESTACION"]),
+        observaciones:    findCol(headers, ["OBSERVACIONES","observaciones","OBSERVACION","obs"]),
+      };
+      
+      const missing = Object.entries(colMap)
+        .filter(([k,v]) => !v && !["observaciones","fechaEntrada","horaEntrada","tipo","hospitalFallec","tipoDeMuerte","ciudadMuerte","municipioPrestacion"].includes(k))
+        .map(([k]) => k);
+
+      if (missing.length > 0) {
+        setColError(`Columnas obligatorias faltantes: ${missing.join(", ")}. Columnas en CSV: ${headers.join(", ")}`);
+        return;
+      }
+      setColError(""); setCols(colMap); setRows(parsed);
+    };
+    reader.readAsText(file, "utf-8");
+  }, []);
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault(); setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }, [processFile]);
+
+  const analyzed = cols ? rows.map(row => {
+    const res = analyzeRow(row, cols);
+    return { row, ...res };
+  }) : [];
+
+  const total      = analyzed.length;
+  const conError   = analyzed.filter(r => r.novedades.some(n => n.tipo === "ERROR")).length;
+  const conTardio  = analyzed.filter(r => r.novedades.some(n => n.tipo === "TARDÍO")).length;
+  const conAlerta  = analyzed.filter(r => r.novedades.some(n => n.tipo === "ALERTA")).length;
+  const conInfo    = analyzed.filter(r => r.novedades.some(n => n.tipo === "INFO")).length;
+  const sinNovedad = analyzed.filter(r => r.novedades.length === 0).length;
+
+  const filteredRows = analyzed.filter(({ row, novedades }) => {
+    const matchFilter =
+      filter === "TODOS"  ? true :
+      filter === "ERROR"  ? novedades.some(n => n.tipo === "ERROR") :
+      filter === "TARDÍO" ? novedades.some(n => n.tipo === "TARDÍO") :
+      filter === "ALERTA" ? novedades.some(n => n.tipo === "ALERTA") :
+      filter === "INFO"   ? novedades.some(n => n.tipo === "INFO") :
+      filter === "OK"     ? novedades.length === 0 : true;
+    const s = search.toLowerCase();
+    const matchSearch = !s || (
+      String(cols?.numeroPrestacion ? row[cols.numeroPrestacion] : "").toLowerCase().includes(s) ||
+      (cols?.observaciones && String(row[cols.observaciones]).toLowerCase().includes(s))
+    );
+    return matchFilter && matchSearch;
+  });
+
+  const STATS = [
+    { label: "TOTAL",       val: total,      color: "#6366f1", bg: "#1e1b4b", f: "TODOS"  },
+    { label: "ERRORES",     val: conError,   color: "#f87171", bg: "#1f0e0e", f: "ERROR"  },
+    { label: "TARDÍOS",     val: conTardio,  color: "#fbbf24", bg: "#1c1200", f: "TARDÍO" },
+    { label: "ALERTAS",     val: conAlerta,  color: "#facc15", bg: "#1a1600", f: "ALERTA" },
+    { label: "JUSTIFICADOS", val: conInfo,    color: "#60a5fa", bg: "#0a1628", f: "INFO"   },
+    { label: "SIN NOVEDAD", val: sinNovedad, color: "#34d399", bg: "#052e16", f: "OK"     },
+  ];
+
+  return (
+    <div style={{ fontFamily: "'IBM Plex Mono', monospace", background: "#0f1117", minHeight: "100vh", color: "#e2e8f0" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1d26; }
+        ::-webkit-scrollbar-thumb { background: #3a3f52; border-radius: 3px; }
+        .stat-card { transition: transform .15s, box-shadow .15s; cursor: pointer; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .row-btn { cursor: pointer; transition: background .12s; }
+        .row-btn:hover td { background: rgba(99,102,241,.08) !important; }
+        .drop-zone { transition: border-color .2s, background .2s; }
+      `}</style>
+
+      {/* MODAL */}
+      <Modal item={selected} cols={cols} onClose={() => setSelected(null)} />
+
+      {/* HEADER */}
+      <div style={{ borderBottom: "1px solid #1e2235", padding: "18px 28px", display: "flex", alignItems: "center", gap: 14, background: "#0d0f19" }}>
+        <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>⚑</div>
+        <div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-.5px" }}>AUDITORÍA DE SERVICIOS</div>
+          <div style={{ fontSize: 10, color: "#6b7280", letterSpacing: 1 }}>CONTROL DE NOVEDADES CRONOLÓGICAS</div>
+        </div>
+        {fileName && (
+          <div style={{ marginLeft: "auto", fontSize: 11, color: "#6366f1", background: "#1e1b4b", padding: "5px 10px", borderRadius: 6, border: "1px solid #312e81" }}>
+            📄 {fileName}
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "20px 28px" }}>
+        {/* DROP ZONE */}
+        {!rows.length && (
+          <div
+            className="drop-zone"
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            style={{
+              border: `2px dashed ${dragging ? "#6366f1" : "#2d3148"}`,
+              borderRadius: 16, background: dragging ? "rgba(99,102,241,.08)" : "#13151f",
+              padding: "56px 40px", textAlign: "center", marginBottom: 24,
+            }}
+          >
+            <div style={{ fontSize: 44, marginBottom: 10 }}>📋</div>
+            <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 17, fontWeight: 700, color: "#fff", marginBottom: 6 }}>
+              Arrastra tu archivo CSV aquí
+            </div>
+            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 18, lineHeight: 1.8 }}>
+              NUMEROPRESTACION · FECHASOLICITUD · FECHADIGITACION · HORARECOGIDASERVICIO<br/>
+              Opcionales: FECHAENTRADA · OBSERVACIONES
+            </div>
+            <label style={{ cursor:"pointer", background:"linear-gradient(135deg,#6366f1,#8b5cf6)", color:"#fff", padding:"10px 22px", borderRadius:8, fontSize:12, fontWeight:700, letterSpacing:.5 }}>
+              SELECCIONAR ARCHIVO
+              <input type="file" accept=".csv,.txt" onChange={e => { const f=e.target.files[0]; if(f) processFile(f); }} style={{ display:"none" }} />
+            </label>
+            {colError && <div style={{ marginTop:14, color:"#f87171", fontSize:11, background:"#1f0e0e", padding:"10px 14px", borderRadius:8, border:"1px solid #7f1d1d" }}>⚠ {colError}</div>}
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <>
+            {/* STATS */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10, marginBottom:20 }}>
+              {STATS.map(s => (
+                <div key={s.label} className="stat-card"
+                  onClick={() => setFilter(filter === s.f ? "TODOS" : s.f)}
+                  style={{
+                    background: s.bg, border: `1px solid ${filter===s.f ? s.color : s.color+"33"}`,
+                    borderRadius: 12, padding: "14px 16px",
+                    boxShadow: filter===s.f ? `0 0 12px ${s.color}44` : "none",
+                  }}>
+                  <div style={{ fontSize:11, color:"#6b7280", letterSpacing:1, marginBottom:4 }}>{s.label}</div>
+                  <div style={{ fontSize:26, fontWeight:700, color:s.color, fontFamily:"'Syne',sans-serif" }}>{s.val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* TOOLBAR */}
+            <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:14, flexWrap:"wrap" }}>
+              <input
+                placeholder="🔍  Buscar por prestación u observación…"
+                value={search} onChange={e => setSearch(e.target.value)}
+                style={{ padding:"7px 12px", borderRadius:8, border:"1px solid #2d3148", background:"#13151f", color:"#e2e8f0", fontSize:11, flex:1, minWidth:220, outline:"none" }}
+              />
+              <button onClick={() => { setRows([]); setCols(null); setFileName(""); setFilter("TODOS"); }}
+                style={{ padding:"7px 14px", borderRadius:8, border:"1px solid #2d3148", background:"transparent", color:"#6b7280", fontSize:11, cursor:"pointer" }}>
+                ↩ Nuevo archivo
+              </button>
+            </div>
+
+            {/* TABLE */}
+            <div style={{ overflowX:"auto", borderRadius:12, border:"1px solid #1e2235" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:"#111420", borderBottom:"1px solid #1e2235" }}>
+                    {["#","N° PRESTACIÓN","F. SOLICITUD","F. DIGITACIÓN","HORA RECOGIDA","F. ENTRADA","ESTADO","NOVEDADES"].map(h => (
+                      <th key={h} style={{ padding:"10px 12px", textAlign:"left", color:"#6b7280", fontWeight:600, letterSpacing:.8, fontSize:10, whiteSpace:"nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.length === 0 && (
+                    <tr><td colSpan={8} style={{ padding:40, textAlign:"center", color:"#6b7280" }}>No hay registros que coincidan</td></tr>
+                  )}
+                  {filteredRows.map((item, i) => {
+                    const { row, novedades, fechaSolic, fechaDigit, horaRecog, fechaEntrada } = item;
+                    const worst = novedades.some(n=>n.tipo==="ERROR") ? "ERROR"
+                                : novedades.some(n=>n.tipo==="TARDÍO") ? "TARDÍO"
+                                : novedades.some(n=>n.tipo==="ALERTA") ? "ALERTA"
+                                : novedades.some(n=>n.tipo==="INFO")   ? "INFO" : "OK";
+                    const rowBg = worst==="ERROR" ? "rgba(239,68,68,.04)" : worst==="TARDÍO" ? "rgba(251,191,36,.025)" : "transparent";
+                    return (
+                      <tr key={i} className="row-btn" onClick={() => setSelected(item)}
+                        style={{ borderBottom:"1px solid #1a1d2e", background:rowBg }}>
+                        <td style={{ padding:"10px 12px", color:"#4b5563" }}>{i+1}</td>
+                        <td style={{ padding:"10px 12px", color:"#a5b4fc", fontWeight:600 }}>
+                          {cols?.numeroPrestacion ? row[cols.numeroPrestacion] : "—"}
+                        </td>
+                        <td style={{ padding:"10px 12px", color:"#cbd5e1", whiteSpace:"nowrap" }}>{fmtDate(fechaSolic)}</td>
+                        <td style={{ padding:"10px 12px", color:"#cbd5e1", whiteSpace:"nowrap" }}>{fmtDate(fechaDigit)}</td>
+                        <td style={{ padding:"10px 12px", color: horaRecog ? "#cbd5e1" : "#f87171", whiteSpace:"nowrap", fontWeight: horaRecog ? 400 : 700 }}>
+                          {horaRecog ? fmtDate(horaRecog) : "SIN HORA"}
+                        </td>
+                        <td style={{ padding:"10px 12px", color:"#cbd5e1", whiteSpace:"nowrap" }}>{fmtDate(fechaEntrada)}</td>
+                        <td style={{ padding:"10px 12px" }}><Badge tipo={worst} /></td>
+                        <td style={{ padding:"10px 12px", minWidth:220 }}>
+                          {novedades.length === 0
+                            ? <span style={{ color:"#34d399", fontSize:11 }}>Sin novedad</span>
+                            : <div style={{ display:"flex", flexWrap:"wrap", gap:3 }}>
+                                {novedades.map((n,j) => (
+                                  <span key={j} style={{
+                                    fontSize:10, padding:"2px 7px", borderRadius:10,
+                                    background: BADGE_STYLES[n.tipo]?.bg,
+                                    color: BADGE_STYLES[n.tipo]?.color,
+                                    border: `1px solid ${BADGE_STYLES[n.tipo]?.border}`,
+                                    fontWeight:600,
+                                  }}>{n.codigo}</span>
+                                ))}
+                              </div>
+                          }
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+```
