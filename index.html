@@ -257,7 +257,8 @@ function readFile(file, okId, cb) {
         document.getElementById(okId).style.display = 'block';
         cb(e.target.result);
       // Solo se habilita si los tres archivos obligatorios han sido cargados
-document.getElementById('btn-anal').disabled = !(csvPrincipal && csvGastos && csvLlamadas);
+// El botón se habilitará si detecta datos en cualquiera de las variables de reportes
+document.getElementById('btn-anal').disabled = !(csvPrincipal || csvGastos || csvLlamadas);
     };
     reader.readAsText(file, 'latin1');
 }
