@@ -256,7 +256,8 @@ function readFile(file, okId, cb) {
     reader.onload = e => {
         document.getElementById(okId).style.display = 'block';
         cb(e.target.result);
-        document.getElementById('btn-anal').disabled = !csvPrincipal;
+      // Solo se habilita si los tres archivos obligatorios han sido cargados
+document.getElementById('btn-anal').disabled = !(csvPrincipal && csvGastos && csvLlamadas);
     };
     reader.readAsText(file, 'latin1');
 }
