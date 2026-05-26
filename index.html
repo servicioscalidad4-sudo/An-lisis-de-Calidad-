@@ -1,11 +1,9 @@
---- START OF FILE text/html ---
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Control Renacer v25.2</title>
+    <title>Sistema de Control Renacer v25.2 - Modulo de Horas Integrado</title>
     <style>
         :root {
             --jr-dark: #1a0e2a; 
@@ -110,8 +108,9 @@
         td { padding: 15px; border-bottom: 1px solid #f2f2f2; vertical-align: top; }
         
         .nov-ul { list-style: none; margin: 0; padding: 0; }
-        .nov-ul li { margin-bottom: 5px; font-size: 11px; display: flex; gap: 8px; color: #444; }
-        .nov-ul li::before { content: "•"; color: var(--jr-red); font-weight: bold; }
+        .nov-ul li { margin-bottom: 5px; font-size: 11px; display: flex; gap: 8px; color: #444; margin-left: 5px; }
+        .nov-ul li.time-nov::before { content: "⏱"; color: var(--jr-orange); font-weight: bold; }
+        .nov-ul li.crit-nov::before { content: "•"; color: var(--jr-red); font-weight: bold; }
 
         .btn-id { background: none; border: none; color: var(--jr-dark); font-weight: 800; text-decoration: underline; cursor: pointer; }
         .chip-nov { background: var(--jr-red); color: white; padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; }
@@ -138,9 +137,9 @@
     <img src="https://i.ibb.co/3ykS8mS/JR-Logo.png" alt="JR Logo">
     <div class="header-text">
         <h1>Sistema de Control Renacer</h1>
-        <p>Auditoría v25.2 · SLA Recogida/Velación · Cenizas por Regional · Mascota Coherencia</p>
+        <p>Auditoría v25.2 Integrada · SLA de Tiempos Exclusivo · Cruce de Novedades Global</p>
     </div>
-    <div class="badge">Auditoría en Tiempo Real</div>
+    <div class="badge">Auditoría de Horas y Datos Activa</div>
 </div>
 
 <div class="container">
@@ -166,7 +165,7 @@
         </div>
     </div>
 
-    <button class="btn-main" id="btn-anal" disabled onclick="analizar()">INICIAR AUDITORÍA →</button>
+    <button class="btn-main" id="btn-anal" disabled onclick="analizar()">INICIAR AUDITORÍA INTEGRAL →</button>
 
     <div id="results" style="display:none">
         <div class="stats-grid" id="main-stats"></div>
@@ -176,7 +175,8 @@
             <select id="s-reg"><option value="">Todas las regionales</option></select>
             <select id="s-est">
                 <option value="">Todos los registros</option>
-                <option value="NOV">Solo Novedades</option>
+                <option value="NOV">Solo Novedades Globales</option>
+                <option value="TIME">Solo Alertas de Tiempo/SLA</option>
                 <option value="OK">Solo Correctos</option>
             </select>
             <button onclick="exportar()" style="margin-left:auto; background:var(--jr-green); color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer;">📥 Exportar Resultado</button>
@@ -192,7 +192,7 @@
                         <th>Regional</th>
                         <th>Tipo / Cat.</th>
                         <th>Estado</th>
-                        <th>Novedades Detectadas</th>
+                        <th>Novedades Detectadas (Campos y Tiempos)</th>
                     </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
@@ -200,7 +200,6 @@
         </div>
     </div>
 
-    <!-- SECCIÓN LLAMADAS -->
     <div id="section-llamadas" style="display:none; max-width:1500px; margin:30px auto; padding:0 20px;">
         <div style="background:linear-gradient(135deg,#1a0e2a,#2563eb); color:white; padding:18px 25px; border-radius:12px 12px 0 0; display:flex; align-items:center; gap:12px;">
             <span style="font-size:24px;">📞</span>
@@ -277,32 +276,25 @@ function getCol(row, aliasList) {
 }
 
 function parseCSV(text) {
-    // Une líneas que pertenecen al mismo campo entrecomillado antes de dividir
     function joinQuotedLines(raw) {
         const result = [];
         let cur = '', inQ = false;
         const lines = raw.split(/\r?\n/);
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            // contar comillas no escapadas en la línea acumulada + esta línea
             const combined = cur ? cur + ' ' + line : line;
-            // alternar estado inQ contando comillas
             let q = inQ;
             for (let c of line) { if (c === '"') q = !q; }
             if (!inQ && !q) {
-                // línea completa (ninguna comilla sin cerrar)
                 if (combined.trim()) result.push(combined);
                 cur = ''; inQ = false;
             } else if (!inQ && q) {
-                // abrió comilla sin cerrar → continuar acumulando
                 cur = combined; inQ = true;
             } else if (inQ && !q) {
-                // cerró la comilla que estaba abierta
                 cur = combined; inQ = false;
                 if (cur.trim()) result.push(cur);
                 cur = '';
             } else {
-                // inQ && q → sigue abierta
                 cur = combined;
             }
         }
@@ -362,10 +354,35 @@ function parseDate(str) {
     return new Date(parts[2], parts[1]-1, parts[0]);
 }
 
+// NUEVA FUNCIÓN AUXILIAR PARA PARSEAR FECHA Y HORA CONJUNTA DE FORMA ESTABLE
+function parseDateTime(fechaStr, horaStr) {
+    if (!fechaStr) return null;
+    const cleanFecha = fechaStr.split(' ')[0];
+    const parts = cleanFecha.split(/[\/\-\.]/);
+    if (parts.length < 3) return null;
+    
+    let año, mes, dia;
+    if (parts[0].length === 4) {
+        año = parseInt(parts[0]); mes = parseInt(parts[1]) - 1; dia = parseInt(parts[2]);
+    } else {
+        dia = parseInt(parts[0]); mes = parseInt(parts[1]) - 1; año = parseInt(parts[2]);
+    }
+
+    let h = 0, m = 0;
+    if (horaStr && horaStr !== "00:00") {
+        const hParts = horaStr.split(':');
+        if (hParts.length >= 2) {
+            h = parseInt(hParts[0]) || 0;
+            m = parseInt(hParts[1]) || 0;
+        }
+    }
+    return new Date(año, mes, dia, h, m, 0);
+}
+
 function detectarNovedades(row, gastosList) {
     const novs = [];
 
-    // ── Lectura de campos ──────────────────────────────────────────────────────
+    // ── Lectura de campos básicos ──────────────────────────────────────────────
     const nroP          = getCol(row, ["NUMEROPRESTACION","NUMERO PRESTACION","PRESTACION"]).trim();
     const tipo          = getCol(row, ["TIPO"]);
     const cat           = getCol(row, ["CATEGORIA"]);
@@ -417,7 +434,7 @@ function detectarNovedades(row, gastosList) {
     const horaSalida    = getCol(row, ["HORASALIDA","HORA SALIDA"]);
     const observaciones = getCol(row, ["OBSERVACIONES"]);
 
-    // ── Flags de tipo ──────────────────────────────────────────────────────────
+    // Flags de tipo
     const clasificacionEsMascota  = clasificacion.toLowerCase().includes("mascota");
     const tipoEsMascota           = tipo.toLowerCase().includes("mascota");
     const esMascota               = tipoEsMascota || clasificacionEsMascota;
@@ -425,271 +442,225 @@ function detectarNovedades(row, gastosList) {
     const esAfiliadoCobTotal      = tipo.trim().toLowerCase() === "afiliado cobertura total";
     const esClasificacionCompleto = clasificacion.trim().toLowerCase() === "completo";
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 0. COHERENCIA MASCOTA: Clasificación y Tipo deben coincidir
-    // ══════════════════════════════════════════════════════════════════════════
+    // 0. COHERENCIA MASCOTA
     if (clasificacionEsMascota && !tipoEsMascota)
-        novs.push(`Error de Tipo/Clasificación: Clasificación es "Mascota" pero Tipo es "${tipo || 'VACÍO'}" — debe ser Mascota`);
+        novs.push({type: 'CRIT', text: `Error de Tipo/Clasificación: Clasificación es "Mascota" pero Tipo es "${tipo || 'VACÍO'}" — debe ser Mascota`});
     if (tipoEsMascota && !clasificacionEsMascota && clasificacion)
-        novs.push(`Error de Clasificación/Tipo: Tipo es "Mascota" pero Clasificación es "${clasificacion}" — debe ser Mascota`);
+        novs.push({type: 'CRIT', text: `Error de Clasificación/Tipo: Tipo es "Mascota" pero Clasificación es "${clasificacion}" — debe ser Mascota`});
 
-    // ══════════════════════════════════════════════════════════════════════════
     // 1. MASCOTAS — Identificación
-    // ══════════════════════════════════════════════════════════════════════════
     if (esMascota) {
-        if (idF !== nroP) novs.push("Mascota: IDENTIFICACION FALLECIDO debe ser igual al No. Prestación");
+        if (idF !== nroP) novs.push({type: 'CRIT', text: "Mascota: IDENTIFICACION FALLECIDO debe ser igual al No. Prestación"});
     } else {
-        if (!idF) novs.push("Falta IDENTIFICACION FALLECIDO");
-        else if (/[a-zA-Z]/.test(idF)) novs.push("IDENTIFICACION FALLECIDO errónea (contiene letras)");
+        if (!idF) novs.push({type: 'CRIT', text: "Falta IDENTIFICACION FALLECIDO"});
+        else if (/[a-zA-Z]/.test(idF)) novs.push({type: 'CRIT', text: "IDENTIFICACION FALLECIDO errónea (contiene letras)"});
     }
 
-   // ══════════════════════════════════════════════════════════════════════════
-    // 2. CREMACIÓN (mascotas y humanos)
-    //    Antioquia: ENTREGACENIZAS + FECHAENTREGACENIZA son obligatorios
-    //               (entregan cenizas el mismo día, los campos se llenan de inmediato)
-    //    Otras regionales: esos campos deben estar VACÍOS al registrar el servicio;
-    //               se llenan solo cuando el proveedor hace entrega real.
-    //               Si ya tienen datos al crear el registro → novedad de registro anticipado.
-    // ══════════════════════════════════════════════════════════════════════════
+    // 2. CREMACIÓN
     if (destF.includes("cremaci")) {
         const esAntioquia = regional.toLowerCase().includes("antioquia");
         if (esAntioquia) {
-            // Antioquia: obligatorio registrar quien recibe y fecha de entrega
-            if (!entregaCen) novs.push("Falta nombre de quien recibe cenizas (ENTREGA DE CENIZAS)");
+            if (!entregaCen) novs.push({type: 'CRIT', text: "Falta nombre de quien recibe cenizas (ENTREGA DE CENIZAS)"});
             if (!fechaCen) {
-                novs.push("Falta FECHA ENTREGA DE CENIZA");
+                novs.push({type: 'CRIT', text: "Falta FECHA ENTREGA DE CENIZA"});
             } else {
                 const fSol = parseDate(sFechaStr);
                 const fCen = parseDate(fechaCen);
                 if (fSol && fCen && fCen < fSol)
-                    novs.push("FECHA ENTREGA DE CENIZA no puede ser anterior a la fecha de solicitud");
+                    novs.push({type: 'TIME', text: "FECHA ENTREGA DE CENIZA no puede ser anterior a la fecha de solicitud"});
                 if (sHoraStr && horaCen && horaCen === sHoraStr)
-                    novs.push("Hora de entrega de cenizas no puede ser igual a la hora de solicitud");
+                    novs.push({type: 'TIME', text: "Hora de entrega de cenizas no puede ser igual a la hora de solicitud"});
             }
         } else {
-            // Otras regionales: los campos de cenizas deben estar vacíos
-            // (se registran solo cuando el proveedor entrega físicamente)
-            if (entregaCen) novs.push("Fuera de Antioquia: ENTREGA DE CENIZAS debe estar vacío hasta que el proveedor haga entrega real");
-            if (fechaCen)   novs.push("Fuera de Antioquia: FECHA ENTREGA DE CENIZA debe estar vacío hasta que el proveedor haga entrega real");
+            if (entregaCen) novs.push({type: 'CRIT', text: "Fuera de Antioquia: ENTREGA DE CENIZAS debe estar vacío hasta que el proveedor haga entrega real"});
+            if (fechaCen)   novs.push({type: 'CRIT', text: "Fuera de Antioquia: FECHA ENTREGA DE CENIZA debe estar vacío hasta que el proveedor haga entrega real"});
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // 3. EXCEDENTES
-    // ══════════════════════════════════════════════════════════════════════════
     if (excedentes > 0 && !cat.toLowerCase().includes("con excedente")) {
-        novs.push(`Tiene excedente ($${excedentes.toLocaleString()}): categoría debe ser "Cobertura Total Con Excedente"`);
+        novs.push({type: 'CRIT', text: `Tiene excedente ($${excedentes.toLocaleString()}): categoría debe ser "Cobertura Total Con Excedente"`});
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 3.5 SALA DE VELACIÓN / RESIDENCIA
-    //     Aplica cuando SALAVELACION tiene valor real (no vacío, no N/A)
-    //     Obligatorio: fechaEntrada, horaEntrada, fechaSalida, horaSalida
-    //     Duración máxima 24 horas — si supera, debe haber observación
-    // ══════════════════════════════════════════════════════════════════════════
+    // ==========================================
+    // ⏱️ AUDITORÍA DE TIEMPOS Y HORAS (SLA PRO)
+    // ==========================================
     const salaNA = ["","n/a","na","n.a","no aplica","sin sala"].includes(salaVelacion.trim().toLowerCase());
-    if (!esMascota && esCoberturaTotal && !salaNA) {
-        if (!fechaEntrada) novs.push("Falta FECHA DE ENTRADA a sala de velación");
-        if (!horaEntrada || horaEntrada === "00:00") novs.push("Falta HORA DE ENTRADA a sala de velación");
-        if (!fechaSalida) novs.push("Falta FECHA DE SALIDA de sala de velación");
-        if (!horaSalida || horaSalida === "00:00") novs.push("Falta HORA DE SALIDA de sala de velación");
+    
+    // Convertidores a Objetos Date robustos
+    const dtSolicitud = parseDateTime(sFechaStr, sHoraStr);
+    const dtRecogida  = parseDateTime(sFechaStr, hRec);
+    const dtEntrada   = parseDateTime(fechaEntrada, horaEntrada);
+    const dtSalida    = parseDateTime(fechaSalida, horaSalida);
 
-        // Validar duración máxima 24 horas
-        if (fechaEntrada && horaEntrada && fechaSalida && horaSalida &&
-            horaEntrada !== "00:00" && horaSalida !== "00:00") {
-            try {
-                const dtEntrada = new Date(`${fechaEntrada.split(/[T ]/)[0]}T${horaEntrada}`);
-                const dtSalida  = new Date(`${fechaSalida.split(/[T ]/)[0]}T${horaSalida}`);
-                if (!isNaN(dtEntrada) && !isNaN(dtSalida) && dtSalida > dtEntrada) {
-                    const diffHoras = (dtSalida - dtEntrada) / (1000 * 60 * 60);
-                    const diffMin   = Math.round((dtSalida - dtEntrada) / 60000);
-                    const tolerancia = 24 * 60 + 30; // 24h + 30min
-                    if (diffMin > tolerancia) {
-                        const hExtra = Math.floor((diffMin - 24*60) / 60);
-                        const mExtra = (diffMin - 24*60) % 60;
-                        if (!observaciones || observaciones.trim().length < 10) {
-                            novs.push(`Velación supera 24 horas (${diffHoras.toFixed(1)}h) — requiere justificación en OBSERVACIONES o cobro de horas extras a la familia`);
-                        } else {
-                            novs.push(`Velación supera 24 horas (${diffHoras.toFixed(1)}h) — verificar cobro de horas extras: ${hExtra}h ${mExtra}min adicionales`);
-                        }
+    // Validación SLA 1: Solicitud ➔ Recogida (Aplica a Mascotas y Cobertura Total Humana)
+    if (esMascota || esAfiliadoCobTotal) {
+        if (!hRec || hRec === "00:00") {
+            novs.push({type: 'TIME', text: "Falta HORA RECOGIDA SERVICIO"});
+        } else if (dtSolicitud && dtRecogida) {
+            if (dtRecogida < dtSolicitud) {
+                novs.push({type: 'TIME', text: `Inconsistencia: HORA RECOGIDA (${hRec}) es anterior a la HORA DE SOLICITUD (${sHoraStr})`});
+            } else {
+                const diffMinSLA1 = (dtRecogida - dtSolicitud) / 60000;
+                if (diffMinSLA1 > 180) {
+                    novs.push({type: 'TIME', text: `Recogida Lenta (SLA 1): ${Math.round(diffMinSLA1)} min desde solicitud. Supera las 3 horas reglamentarias.`});
+                }
+                if (diffMinSLA1 >= 0 && diffMinSLA1 < 20) {
+                    novs.push({type: 'TIME', text: `Muy Rápido (SLA 1): Recogida en ${Math.round(diffMinSLA1)} min. Posible registro anticipado o servicio prepagado.`});
+                }
+            }
+        }
+    }
+
+    // Validación SLA 2 y Tiempos de Sala (Solo Humanos en Cobertura Total)
+    if (!esMascota && esCoberturaTotal && !salaNA) {
+        if (!fechaEntrada) novs.push({type: 'CRIT', text: "Falta FECHA DE ENTRADA a sala de velación"});
+        if (!horaEntrada || horaEntrada === "00:00") novs.push({type: 'CRIT', text: "Falta HORA DE ENTRADA a sala de velación"});
+        if (!fechaSalida) novs.push({type: 'CRIT', text: "Falta FECHA DE SALIDA de sala de velación"});
+        if (!horaSalida || horaSalida === "00:00") novs.push({type: 'CRIT', text: "Falta HORA DE SALIDA de sala de velación"});
+
+        // SLA 2: Desde Recogida hasta Entrada a Sede (Máximo 4 horas)
+        if (dtRecogida && dtEntrada) {
+            if (dtEntrada < dtRecogida) {
+                novs.push({type: 'TIME', text: "Inconsistencia Cronológica: Entrada a sala es anterior a la recogida del cuerpo."});
+            } else {
+                const diffMinSLA2 = (dtEntrada - dtRecogida) / 60000;
+                if (diffMinSLA2 > 240) {
+                    novs.push({type: 'TIME', text: `Incumple SLA 2: ${Math.round(diffMinSLA2)} min desde recogida hasta entrada a sede (Límite: 4 horas)`});
+                }
+            }
+        }
+
+        // SLA 3 / Duración en Sala (Máximo 24 Horas)
+        if (dtEntrada && dtSalida) {
+            if (dtSalida < dtEntrada) {
+                novs.push({type: 'TIME', text: "Inconsistencia Cronológica: La fecha de salida de sala es anterior a la entrada."});
+            } else {
+                const diffMinSala = Math.round((dtSalida - dtEntrada) / 60000);
+                const limiteSala = 24 * 60 + 30; // 24h + 30 min de gracia estándar
+                
+                if (diffMinSala > limiteSala) {
+                    const horasTotales = (diffMinSala / 60).toFixed(1);
+                    const hExtra = Math.floor((diffMinSala - 24*60) / 60);
+                    const mExtra = (diffMinSala - 24*60) % 60;
+                    
+                    if (!observaciones || observaciones.trim().length < 10) {
+                        novs.push({type: 'TIME', text: `Velación Excedida: Registra ${horasTotales}h en sala. Supera las 24h máximas sin justificación en OBSERVACIONES.`});
+                    } else {
+                        novs.push({type: 'TIME', text: `Velación Prolongada: ${horasTotales}h en sala. Verificar cobro de horas extras por tiempo excedente (${hExtra}h ${mExtra}min)`});
                     }
                 }
-            } catch(e) { /* fechas no parseables */ }
+            }
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 4. LICENCIA DE INHUMACIÓN (solo humanos)
-    // ══════════════════════════════════════════════════════════════════════════
+    // 4. LICENCIA DE INHUMACIÓN
     if (!esMascota) {
         const licL = lic.toLowerCase().trim();
         if (!lic || licL.includes("manual") || !(/\d/.test(lic)) || ["pdt","pendiente","0","pd"].includes(licL)) {
-            novs.push(`LICENCIA INHUMACION no válida: "${lic || 'VACÍO'}"`);
+            novs.push({type: 'CRIT', text: `LICENCIA INHUMACION no válida: "${lic || 'VACÍO'}"`});
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 5. NÚMERO DE CERTIFICADO (solo humanos)
-    // ══════════════════════════════════════════════════════════════════════════
+    // 5. NÚMERO DE CERTIFICADO
     if (!esMascota && nroCert && /[a-zA-Z]/.test(nroCert)) {
-        novs.push("NROCERTIFICADO: contiene letras — debe ser número de licencia válido");
+        novs.push({type: 'CRIT', text: "NROCERTIFICADO: contiene letras — debe ser número de licencia válido"});
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 6. CLASIFICACIÓN = COMPLETO (solo humanos)
-    // ══════════════════════════════════════════════════════════════════════════
-
-    // Vejez — aplica para todos incluyendo mascotas
-    if (causaMuerte && causaMuerte.trim().toLowerCase() === "vejez") novs.push("CAUSA DE MUERTE no puede ser 'Vejez'");
-    if (tipoMuerte  && tipoMuerte.trim().toLowerCase()  === "vejez") novs.push("TIPO DE MUERTE no puede ser 'Vejez'");
-        if (esClasificacionCompleto && !esMascota) {
+    // 6. CLASIFICACIÓN = COMPLETO
+    if (causaMuerte && causaMuerte.trim().toLowerCase() === "vejez") novs.push({type: 'CRIT', text: "CAUSA DE MUERTE no puede ser 'Vejez'"});
+    if (tipoMuerte  && tipoMuerte.trim().toLowerCase()  === "vejez") novs.push({type: 'CRIT', text: "TIPO DE MUERTE no puede ser 'Vejez'"});
+    
+    if (esClasificacionCompleto && !esMascota) {
         const pendientes = ["pdt","pdte","pendiente"];
         if (!fechaExpCed || pendientes.some(p => fechaExpCed.toLowerCase().includes(p)))
-            novs.push("Falta o no válida FECHA EXPEDICIÓN CÉDULA (no puede Quedar Vacio)");
-        if (!causaMuerte) novs.push("Falta CAUSA DE MUERTE");
-        if (!tipoMuerte)  novs.push("Falta TIPO DE MUERTE");
+            novs.push({type: 'CRIT', text: "Falta o no válida FECHA EXPEDICIÓN CÉDULA (no puede quedar vacío)"});
+        if (!causaMuerte) novs.push({type: 'CRIT', text: "Falta CAUSA DE MUERTE"});
+        if (!tipoMuerte)  novs.push({type: 'CRIT', text: "Falta TIPO DE MUERTE"});
         if (causaMuerte && tipoMuerte && causaMuerte.trim().toLowerCase() === tipoMuerte.trim().toLowerCase())
-            novs.push("CAUSA DE MUERTE y TIPO DE MUERTE no pueden ser iguales entre sí");
+            novs.push({type: 'CRIT', text: "CAUSA DE MUERTE y TIPO DE MUERTE no pueden ser iguales entre sí"});
 
-        if (!ciudadMuerte) novs.push("Falta CIUDAD DE FALLECIMIENTO");
-        if (!deptMuerte)   novs.push("Falta DEPARTAMENTO DE FALLECIMIENTO");
-        if (!certDef)      novs.push("Falta CERTIFICADO DE DEFUNCIÓN / NRO CERTIFICADO");
-        // HORAFALLECIMIENTO no existe como columna separada en el CSV actual
-        if (!dirSol)    novs.push("Falta DIRECCIÓN DEL SOLICITANTE");
-        if (!telSol)    novs.push("Falta TELÉFONO DEL SOLICITANTE");
-        if (!parentesco) novs.push("Falta PARENTESCO");
+        if (!ciudadMuerte) novs.push({type: 'CRIT', text: "Falta CIUDAD DE FALLECIMIENTO"});
+        if (!deptMuerte)   novs.push({type: 'CRIT', text: "Falta DEPARTAMENTO DE FALLECIMIENTO"});
+        if (!certDef)      novs.push({type: 'CRIT', text: "Falta CERTIFICADO DE DEFUNCIÓN / NRO CERTIFICADO"});
+        if (!dirSol)    novs.push({type: 'CRIT', text: "Falta DIRECCIÓN DEL SOLICITANTE"});
+        if (!telSol)    novs.push({type: 'CRIT', text: "Falta TELÉFONO DEL SOLICITANTE"});
+        if (!parentesco) novs.push({type: 'CRIT', text: "Falta PARENTESCO"});
     }
 
-    // DESTINO FINAL — obligatorio para todos (humanos y mascotas)
-    if (!destF) novs.push("Falta DESTINO FINAL");
+    if (!destF) novs.push({type: 'CRIT', text: "Falta DESTINO FINAL"});
 
-    // ══════════════════════════════════════════════════════════════════════════
     // 7. IGLESIA / EXEQUIAS
-    //    Solo obliga FECHAEXEQUIAS y HORAEXEQUIAS si:
-    //    - TIPO = exactamente "Afiliado Cobertura Total" (no mascota)
-    //    - IGLESIA tiene parroquia real (no vacío, N/A, NA, No Aplica, Sin Iglesia, Ceremonia Religiosa)
-    //    Si NO es Afiliado Cobertura Total y tiene esos campos → novedad
-    // ══════════════════════════════════════════════════════════════════════════
     const iglesiaExcluidas = ["","n/a","na","no aplica","ceremonia religiosa","sin iglesia"];
     const tieneIglesiaReal = iglesia && !iglesiaExcluidas.includes(iglesia.trim().toLowerCase());
 
     if (!esMascota && esAfiliadoCobTotal && tieneIglesiaReal) {
-        if (!fechaExequias) novs.push("Falta FECHAEXEQUIAS (Iglesia seleccionada en Afiliado Cobertura Total)");
-        if (!horaExequias || horaExequias === "00:00") novs.push("Falta HORAEXEQUIAS (Iglesia seleccionada)");
+        if (!fechaExequias) novs.push({type: 'CRIT', text: "Falta FECHAEXEQUIAS (Iglesia seleccionada en Afiliado Cobertura Total)"});
+        if (!horaExequias || horaExequias === "00:00") novs.push({type: 'CRIT', text: "Falta HORAEXEQUIAS (Iglesia seleccionada)"});
     }
     if (!esAfiliadoCobTotal && (fechaExequias || (horaExequias && horaExequias !== "00:00"))) {
-        novs.push("FECHAEXEQUIAS/HORAEXEQUIAS registradas pero el tipo no aplica (solo Afiliado Cobertura Total con iglesia)");
+        novs.push({type: 'CRIT', text: "FECHAEXEQUIAS/HORAEXEQUIAS registradas pero el tipo no aplica (solo Afiliado Cobertura Total con iglesia)"});
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 8. HORA DE RECOGIDA — SLA 1 y SLA 2
-    // ══════════════════════════════════════════════════════════════════════════
-    if (esMascota || esAfiliadoCobTotal) {
-        if (!hRec || hRec === "00:00") {
-            novs.push("Falta HORA RECOGIDA SERVICIO");
-        } else if (sFechaStr && sHoraStr) {
-            const dtSol = new Date(`${sFechaStr.split(/[T ]/)[0]}T${sHoraStr}`);
-            const dtRec = new Date(`${sFechaStr.split(/[T ]/)[0]}T${hRec}`);
-            if (!isNaN(dtSol) && !isNaN(dtRec)) {
-                if (dtRec < dtSol) novs.push("HORA RECOGIDA no puede ser anterior a la hora de solicitud");
-                const diffMin = (dtRec - dtSol) / 60000;
-                if (diffMin > 180) novs.push(`Recogida Lenta (SLA 1): ${Math.round(diffMin)} min desde solicitud, supera las 3 horas — requiere observación`);
-                if (diffMin >= 0 && diffMin < 20) novs.push(`Muy Rápido (SLA 1): recogida en ${Math.round(diffMin)} min — posible registro inconsistente o servicio prepagado, verificar`);
-            }
-        }
-        // SLA 2: Recogida → Entrada a Sede (no aplica mascotas)
-        if (!esMascota && hRec && sFechaStr && fechaEntrada && horaEntrada && horaEntrada !== "00:00") {
-            try {
-                const dtRec2 = new Date(`${sFechaStr.split(/[T ]/)[0]}T${hRec}`);
-                const dtEntr = new Date(`${fechaEntrada.split(/[T ]/)[0]}T${horaEntrada}`);
-                if (!isNaN(dtRec2) && !isNaN(dtEntr) && dtEntr > dtRec2) {
-                    const diffSLA2 = (dtEntr - dtRec2) / 60000;
-                    if (diffSLA2 > 240) novs.push(`Incumple SLA 2 (Sala/Velación): ${Math.round(diffSLA2)} min desde recogida hasta entrada a sede, supera las 4 horas`);
-                }
-            } catch(e) {}
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
     // 9. MUNICIPIO vs SEDE
-    // ══════════════════════════════════════════════════════════════════════════
     if (municipio && sede && municipio.trim().toLowerCase() !== sede.trim().toLowerCase()) {
-        novs.push(`Municipio (${municipio}) no coincide con Sede (${sede})`);
+        novs.push({type: 'CRIT', text: `Municipio (${municipio}) no coincide con Sede (${sede})`});
     }
-      // ══════════════════════════════════════════════════════════════════════════
-    // 10. DEPARTAMENTO Y MUNICIPIO DE PRESTACIÓN (obligatorio — todos)
-    //     Aplica tanto a humanos como mascotas
-    // ══════════════════════════════════════════════════════════════════════════
+
+    // 10. DEPARTAMENTO Y MUNICIPIO DE PRESTACIÓN
     if (!deptPrestacion || deptPrestacion.toUpperCase() === "N/A" || deptPrestacion.toUpperCase() === "NA")
-        novs.push("Falta DEPARTAMENTO PRESTACIÓN (obligatorio para Cobertura Total y mascotas)");
+        novs.push({type: 'CRIT', text: "Falta DEPARTAMENTO PRESTACIÓN (obligatorio para Cobertura Total y mascotas)"});
     if (!municipioPres || municipioPres.toUpperCase() === "N/A" || municipioPres.toUpperCase() === "NA")
-        novs.push("Falta MUNICIPIO PRESTACIÓN (obligatorio para Cobertura Total y mascotas)");
+        novs.push({type: 'CRIT', text: "Falta MUNICIPIO PRESTACIÓN (obligatorio para Cobertura Total y mascotas)"});
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 11. UBICACIÓN (solo humanos)
-    // ══════════════════════════════════════════════════════════════════════════
+    // 11. UBICACIÓN
     if (!esMascota) {
-        if (hosp.toUpperCase().includes("MEDICINA LEGAL")) novs.push("HOSPITAL no puede ser Medicina Legal no corresponde a un lugar de fallecimiento, sino a una entidad de estudio y valoración del cuerpo");
+        if (hosp.toUpperCase().includes("MEDICINA LEGAL")) novs.push({type: 'CRIT', text: "HOSPITAL no puede ser Medicina Legal (Entidad de valoración, no lugar de fallecimiento)"});
         const hNA = !hosp || ["N/A","NA","N.A"].includes(hosp.toUpperCase());
-        const dNA = !dirF || dirF.toUpperCase() === "N/A" || dirF.length < 5;
-        if (hNA && dNA) novs.push("Debe registrar HOSPITAL o DIRECCIÓN DE FALLECIMIENTO real");
+        const dNA = !dirF || dirF.toUpperCase() === "N/A" || dNA.length < 5;
+        if (hNA && dNA) novs.push({type: 'CRIT', text: "Debe registrar HOSPITAL o DIRECCIÓN DE FALLECIMIENTO real"});
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // 12. RESPONSABLE DE FACTURA / SOLICITANTE / CARROZA
-    // ══════════════════════════════════════════════════════════════════════════
     if (esMascota || esAfiliadoCobTotal) {
-        if (!ciudadFac) novs.push("Falta CIUDAD RESPONSABLE FACTURA");
-        if (!sol)    novs.push("Falta SOLICITANTE");
-        if (!dirSol) novs.push("Falta DIR SOLICITANTE");
-        if (!telSol) novs.push("Falta TEL SOLICITANTE");
-        if (!carroza) novs.push("Falta CARROZA (placa del vehículo)");
-        // Responsable de factura - validado por CEDULA (nombres pueden variar)
+        if (!ciudadFac) novs.push({type: 'CRIT', text: "Falta CIUDAD RESPONSABLE FACTURA"});
+        if (!sol)    novs.push({type: 'CRIT', text: "Falta SOLICITANTE"});
+        if (!dirSol) novs.push({type: 'CRIT', text: "Falta DIR SOLICITANTE"});
+        if (!telSol) novs.push({type: 'CRIT', text: "Falta TEL SOLICITANTE"});
+        if (!carroza) novs.push({type: 'CRIT', text: "Falta CARROZA (placa del vehículo)"});
+        
         const idFLimpio    = idF.replace(/[^0-9]/g, '');
         const idTitLimpio  = idTitular.replace(/[^0-9]/g, '');
         const idRespLimpio = idRespFac.replace(/[^0-9]/g, '');
 
-        // Regla 1: Si TITULAR === FALLECIDO (misma cedula) no puede ser responsable de factura
         if (idTitLimpio && idFLimpio && idTitLimpio === idFLimpio) {
             if (idRespLimpio && idRespLimpio === idFLimpio)
-                novs.push("RESPONSABLE DE FACTURA no puede ser el fallecido — C.C. " + idFLimpio + " (titular es el mismo fallecido)");
+                novs.push({type: 'CRIT', text: "RESPONSABLE DE FACTURA no puede ser el fallecido — C.C. " + idFLimpio});
         }
-        // Regla 2: Si TITULAR != FALLECIDO el responsable de factura debe ser el TITULAR
         if (idTitLimpio && idFLimpio && idTitLimpio !== idFLimpio) {
             if (!idRespLimpio)
-                novs.push("Falta cedula del RESPONSABLE DE FACTURA — debe coincidir con TITULAR C.C. " + idTitLimpio);
+                novs.push({type: 'CRIT', text: "Falta cédula del RESPONSABLE DE FACTURA — debe coincidir con TITULAR C.C. " + idTitLimpio});
             else if (idTitLimpio !== idRespLimpio)
-                novs.push("RESPONSABLE DE FACTURA C.C. " + idRespLimpio + " no coincide con el TITULAR C.C. " + idTitLimpio);
+                novs.push({type: 'CRIT', text: "RESPONSABLE DE FACTURA C.C. " + idRespLimpio + " no coincide con el TITULAR C.C. " + idTitLimpio});
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 13. CEMENTERIO (todos)
-    // ══════════════════════════════════════════════════════════════════════════
-    if (!cementerio) novs.push("Falta CEMENTERIO asignado");
+    if (!cementerio) novs.push({type: 'CRIT', text: "Falta CEMENTERIO asignado"});
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // 14. GASTOS
-    // ══════════════════════════════════════════════════════════════════════════
+    // 14. GASTOS Y COSTOS EXTEMPORÁNEOS
      if (gastosList && gastosList.length > 0) {
         const sDate = parseDate(sFechaStr);
-        // Fecha de cierre del servicio: FECHASALIDA si existe, sino null (se usará sDate como fallback)
         const fechaSalidaGasto = parseDate(fechaSalida) || null;
         const seen = {};
-        let tSala = false, tKit = false, tCofre = false, tCremacion = false, tContenedor = false, tBolsaCeniza = false;
+        let tSala = false, tKit = false, tCofre = false, tCremacion = false, tContenedor = false;
 
         gastosList.forEach(g => {
             const s   = getCol(g, ["SERVICIO"]);
             const v   = parseNum(getCol(g, ["VALORSERV"]));
             const p   = getCol(g, ["PROVEEDOR"]).toUpperCase();
             const pag = getCol(g, ["IDPAGOPROVEEDOR"]);
-            const obs = getCol(g, ["OBSERVACIONES"]).toLowerCase();
             const fCreStr = getCol(g, ["FECHAGASTO","FECHACREACION","FECHA REGISTRO"]);
 
-            // Gasto extemporáneo
-            // Salida de Cofre Automática: máximo 1 día desde el inicio del servicio
-            // Demás gastos: deben estar digitados antes o el mismo día que FECHASALIDA (fin del servicio)
-            //   Si no hay FECHASALIDA, se usa la fecha de solicitud como límite
             if (sDate && fCreStr) {
                 const fCre = parseDate(fCreStr);
                 if (fCre && fCre > sDate) {
@@ -697,16 +668,14 @@ function detectarNovedades(row, gastosList) {
                     if (esCofre) {
                         const diff = Math.ceil((fCre - sDate) / (1000 * 60 * 60 * 24));
                         if (diff > 1)
-                            novs.push(`Gasto Extemporáneo — Salida de Cofre tardía: registrada ${diff} día(s) después del inicio del servicio (máx. 1 día)`);
+                            novs.push({type: 'TIME', text: `Gasto Extemporáneo — Salida de Cofre tardía: registrada ${diff} día(s) después (máx. 1 día)`});
                     } else {
-                        // Fecha límite = FECHASALIDA si existe, si no = fecha solicitud
                         const fLimite = fechaSalidaGasto ? fechaSalidaGasto : sDate;
-                        // Normalizamos a medianoche para comparar solo por día
                         const fLimDia = new Date(fLimite.getFullYear(), fLimite.getMonth(), fLimite.getDate());
                         const fCreDia = new Date(fCre.getFullYear(), fCre.getMonth(), fCre.getDate());
                         if (fCreDia > fLimDia) {
                             const diffDias = Math.ceil((fCreDia - fLimDia) / (1000 * 60 * 60 * 24));
-                            novs.push(`Gasto Extemporáneo: "${s}" — registrado ${diffDias} día(s) después del cierre del servicio`);
+                            novs.push({type: 'TIME', text: `Gasto Extemporáneo: "${s}" — digitado ${diffDias} día(s) después del cierre.`});
                         }
                     }
                 }
@@ -717,37 +686,29 @@ function detectarNovedades(row, gastosList) {
             if (s.trim().toLowerCase() === "salida de cofre automatica") tCofre = true;
             if (s.trim().toLowerCase() === "cremación" || s.trim().toLowerCase() === "cremacion") tCremacion = true;
             if (s.trim().toLowerCase() === "contenedor") tContenedor = true;
-            if (s.trim().toLowerCase().includes("bolsa") && s.trim().toLowerCase().includes("ceniza")) tBolsaCeniza = true;
 
-            // Kits de Jardines (valor 0 es válido)
             if (p.includes("JARDINES")) {
                 if (s.toLowerCase().includes("cafeteria") && v > 0 && v !== 45000)
-                    novs.push(`Kit Cafetería debe ser $45.000 (Registrado: $${v.toLocaleString()})`);
+                    novs.push({type: 'CRIT', text: `Kit Cafetería debe ser $45.000 (Registrado: $${v.toLocaleString()})`});
                 if (s.toLowerCase().includes("insumos") && v > 0 && v !== 25000)
-                    novs.push(`Kit Insumos debe ser $25.000 (Registrado: $${v.toLocaleString()})`);
+                    novs.push({type: 'CRIT', text: `Kit Insumos debe ser $25.000 (Registrado: $${v.toLocaleString()})`});
             }
 
-            // Proveedor externo sin ID de pago autorizado
-            // Excluidos: Contenedor y Bolsas de cenizas (no requieren ID pago)
             const pagClean = pag.trim();
             const sLow = s.trim().toLowerCase();
             const esExcluido = sLow === "contenedor" || sLow.includes("bolsa") && sLow.includes("ceniza");
             if (!p.includes("JARDINES") && !pagClean && v > 0 && !esExcluido)
-                novs.push(`Gasto sin autorización: "${s}" · ${getCol(g,["PROVEEDOR"])} ($${v.toLocaleString('es-CO')}) — falta ID pago proveedor`);
+                novs.push({type: 'CRIT', text: `Gasto sin autorización: "${s}" · ${getCol(g,["PROVEEDOR"])} ($${v.toLocaleString()}) — falta ID pago`});
 
-            // Duplicados
             const key = s + "|" + v + "|" + p;
             if (seen[key] !== undefined) {
-                novs.push(`DUPLICADO: "${s}" ($${v.toLocaleString()}) — verificar observación`);
-            } else {
-                seen[key] = true;
-            }
+                novs.push({type: 'CRIT', text: `DUPLICADO: "${s}" ($${v.toLocaleString()}) — revisar duplicidad.`});
+            } else { seen[key] = true; }
         });
 
-        // Sala de velación + Kit de cafetería → conflicto
-        if (tSala && tKit) novs.push("Conflicto: Sala de Velación con Kit de Cafetería en el mismo servicio");
-        if (esAfiliadoCobTotal && !tCofre) novs.push("Falta registro de SALIDA DE COFRE AUTOMÁTICA en gastos");
-        if (tCremacion && !tContenedor) novs.push("Cremacion registrada en gastos sin CONTENEDOR");
+        if (tSala && tKit) novs.push({type: 'CRIT', text: "Conflicto: Sala de Velación con Kit de Cafetería en el mismo servicio"});
+        if (esAfiliadoCobTotal && !tCofre) novs.push({type: 'CRIT', text: "Falta registro de SALIDA DE COFRE AUTOMÁTICA en gastos"});
+        if (tCremacion && !tContenedor) novs.push({type: 'CRIT', text: "Cremación registrada en gastos sin CONTENEDOR"});
     }
 
     return novs;
@@ -756,7 +717,6 @@ function detectarNovedades(row, gastosList) {
 function parseLlamadasCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
-    // Detect separator
     const sep = lines[0].includes(';') ? ';' : ',';
     const headers = lines[0].split(sep).map(h => h.trim().toUpperCase().replace(/^"|"$/g, ''));
     return lines.slice(1).map(line => {
@@ -780,7 +740,6 @@ function analizar() {
         return { ...r, _id: id, _novs: detectarNovedades(r, gastosMapGlobal[id] || []) };
     }).filter(r => r !== null);
     
-    // Build llamadas map keyed by NROFICHA
     llamadasMap = {};
     if (csvLlamadas) {
         const lRows = parseLlamadasCSV(csvLlamadas);
@@ -799,7 +758,6 @@ function analizar() {
     regs.forEach(reg => { if(reg) sel.innerHTML += `<option value="${reg}">${reg}</option>`; });
     document.getElementById('results').style.display = 'block';
     
-    // Show/hide llamadas section
     if (csvLlamadas) {
         document.getElementById('section-llamadas').style.display = 'block';
         renderLlamadas();
@@ -809,30 +767,55 @@ function analizar() {
 
 function render() {
     const s = document.getElementById('s-search').value.toLowerCase(), reg = document.getElementById('s-reg').value, est = document.getElementById('s-est').value;
-    const filtrados = resultados.filter(r => (getCol(r, ["NOMBREFALLECIDO"]).toLowerCase().includes(s) || r._id.toLowerCase().includes(s)) && (reg==="" || getCol(r,["REGIONAL"])===reg) && (est==="" ? true : (est==="NOV" ? r._novs.length>0 : r._novs.length===0)));
+    
+    const filtrados = resultados.filter(r => {
+        const matchSearch = getCol(r, ["NOMBREFALLECIDO"]).toLowerCase().includes(s) || r._id.toLowerCase().includes(s);
+        const matchReg = (reg === "" || getCol(r, ["REGIONAL"]) === reg);
+        
+        let matchEst = true;
+        if (est === "NOV") matchEst = r._novs.some(n => n.type === 'CRIT');
+        if (est === "TIME") matchEst = r._novs.some(n => n.type === 'TIME');
+        if (est === "OK") matchEst = r._novs.length === 0;
+
+        return matchSearch && matchReg && matchEst;
+    });
+    
+    const totalNovedadesAbsolutas = resultados.reduce((a, b) => a + b._novs.length, 0);
     
     document.getElementById('main-stats').innerHTML = `
         <div class="stat-card"><label>Total servicios</label><span class="s-total">${resultados.length}</span></div>
-        <div class="stat-card"><label>Con novedades</label><span class="s-nov">${resultados.filter(x=>x._novs.length>0).length}</span></div>
-        <div class="stat-card"><label>Sin novedades</label><span class="s-ok">${resultados.filter(x=>x._novs.length===0).length}</span></div>
-        <div class="stat-card"><label>Novedades totales</label><span class="s-alert">${resultados.reduce((a,b)=>a+b._novs.length,0)}</span></div>`;
+        <div class="stat-card"><label>Con Inconsistencias</label><span class="s-nov">${resultados.filter(x=>x._novs.length>0).length}</span></div>
+        <div class="stat-card"><label>100% Correctos</label><span class="s-ok">${resultados.filter(x=>x._novs.length===0).length}</span></div>
+        <div class="stat-card"><label>Alertas Totales</label><span class="s-alert">${totalNovedadesAbsolutas}</span></div>`;
     
-    document.getElementById('tbody').innerHTML = filtrados.map(r => `
+    document.getElementById('tbody').innerHTML = filtrados.map(r => {
+        const tieneNovedades = r._novs.length > 0;
+        let badgeColor = 'var(--jr-green)';
+        let badgeText = 'OK';
+        
+        if (r._novs.some(n => n.type === 'CRIT')) { badgeColor = 'var(--jr-red)'; badgeText = 'NOVEDAD'; }
+        else if (r._novs.some(n => n.type === 'TIME')) { badgeColor = 'var(--jr-orange)'; badgeText = 'ALERT. TIEMPO'; }
+
+        return `
         <tr>
             <td><button class="btn-id" onclick="abrirModal('${r._id}')">${r._id}</button></td>
             <td>${getCol(r, ["FECHASOLICITUD","FECHA SOLICITUD"])}</td>
             <td><strong>${getCol(r, ["NOMBREFALLECIDO"])}</strong></td>
             <td>${getCol(r, ["REGIONAL"])}</td>
             <td><div>${getCol(r,["TIPO"])}</div><div style="color:#888; font-size:10px">${getCol(r,["CATEGORIA"])}</div></td>
-            <td><span class="${r._novs.length?'chip-nov':''}" style="background:${r._novs.length?'var(--jr-red)':'var(--jr-green)'}">${r._novs.length?'NOVEDAD':'OK'}</span></td>
-            <td><ul class="nov-ul">${r._novs.map(n=>`<li>${n}</li>`).join('')}</ul></td>
-        </tr>`).join('');
+            <td><span class="chip-nov" style="background:${badgeColor}">${badgeText}</span></td>
+            <td>
+                <ul class="nov-ul">
+                    ${r._novs.map(n => `<li class="${n.type === 'TIME' ? 'time-nov' : 'crit-nov'}">${n.text}</li>`).join('')}
+                </ul>
+            </td>
+        </tr>`;
+    }).join('');
 }
 
 function abrirModal(id) {
     const r = resultados.find(x => x._id === id), gastos = gastosMapGlobal[id] || [];
     document.getElementById('m-id').textContent = id;
-    // Fechas del servicio desde el reporte principal
     const fechaSolicitud = getCol(r, ["FECHASOLICITUD","SFECHA","FECHA SOLICITUD","FECHA"]);
     const fechaEntradaM  = getCol(r, ["FECHAENTRADA","FECHA ENTRADA"]);
     const horaEntradaM   = getCol(r, ["HORAENTRADA","HORA ENTRADA"]);
@@ -841,7 +824,6 @@ function abrirModal(id) {
     let tP = 0, tV = 0, sP = 0;
     let filas = gastos.map(g => {
         const cp = parseNum(getCol(g,["VALORSERV"])), vc = parseNum(getCol(g,["VALORVENTA"])), pag = getCol(g,["IDPAGOPROVEEDOR"]), prov = getCol(g,["PROVEEDOR"]);
-        // Fechas del gasto: SFECHA = fecha del servicio, FECHAGASTO = fecha de ingreso del gasto
         const sFechaGasto    = getCol(g, ["SFECHA"]);
         const fechaIngGasto  = getCol(g, ["FECHAGASTO","FECHA GASTO"]);
         tP += cp; tV += vc; if(!pag && cp>0 && !prov.toUpperCase().includes("JARDINES")) sP++;
@@ -874,12 +856,10 @@ function highlightInconformidad(text) {
     return text.replace(/inconformidad/gi, '<mark style="background:#ffd0d0;color:#b00;font-weight:700;padding:1px 3px;border-radius:3px;">⚠ $&</mark>');
 }
 
-// Active quick-filter for llamadas stat cards: '' | 'INC' | 'OK'
 let llCardFilter = '';
 
 function setLlCardFilter(val) {
-    llCardFilter = llCardFilter === val ? '' : val;  // toggle off if same
-    // Sync the select dropdown
+    llCardFilter = llCardFilter === val ? '' : val;
     const sel = document.getElementById('ll-filter');
     if (sel) sel.value = llCardFilter;
     renderLlamadas();
@@ -887,21 +867,16 @@ function setLlCardFilter(val) {
 
 function renderLlamadas() {
     const searchLl = (document.getElementById('ll-search') ? document.getElementById('ll-search').value.toLowerCase() : '');
-    // Buscador principal también filtra llamadas por NROFICHA
     const searchMain = (document.getElementById('s-search') ? document.getElementById('s-search').value.toLowerCase() : '');
-    const searchCombined = searchMain || searchLl;
-    // Respect both card filter and dropdown (dropdown wins if changed directly)
     const selVal = document.getElementById('ll-filter') ? document.getElementById('ll-filter').value : '';
     const filterInc = selVal !== '' ? selVal : llCardFilter;
 
-    // Set of NROFICHA present in the servicios report (respeta filtro del buscador principal)
     const fichasServicio = new Set(
         resultados
             .filter(r => !searchMain || r._id.toLowerCase().includes(searchMain) || getCol(r,["NOMBREFALLECIDO"]).toLowerCase().includes(searchMain))
             .map(r => r._id.trim())
     );
 
-    // Gather only llamadas rows whose NROFICHA is in the (filtered) servicios set
     const allRows = [];
     Object.entries(llamadasMap).forEach(([ficha, llamadas]) => {
         if (!fichasServicio.has(ficha)) return;
@@ -913,7 +888,6 @@ function renderLlamadas() {
     });
 
     const filtered = allRows.filter(r => {
-        // Si hay búsqueda en el campo principal, filtrar también la tabla de llamadas por ficha
         const matchMain = !searchMain || r.ficha.toLowerCase().includes(searchMain);
         const matchSearch = !searchLl || r.ficha.toLowerCase().includes(searchLl) || r.obs.toLowerCase().includes(searchLl) || (r.row['NOMBRES']||'').toLowerCase().includes(searchLl);
         const matchFilter = filterInc === '' ? true : (filterInc === 'INC' ? r.tieneInc : !r.tieneInc);
@@ -935,12 +909,12 @@ function renderLlamadas() {
         <div class="stat-card" style="border-left:4px solid var(--jr-red);transition:.2s;${activeStyle('INC')}" onclick="setLlCardFilter('INC')">
             <label>⚠ Con INCONFORMIDAD</label>
             <span style="font-size:28px;font-weight:800;color:var(--jr-red)">${totalInc}</span>
-            <div style="font-size:10px;color:#999;margin-top:4px">${filterInc==='INC'?'🔽 Filtro activo — clic para quitar':'▶ Clic para filtrar'}</div>
+            <div style="font-size:10px;color:#999;margin-top:4px">${filterInc==='INC'?'🔽 Filtro activo':'▶ Clic para filtrar'}</div>
         </div>
         <div class="stat-card" style="border-left:4px solid var(--jr-green);transition:.2s;${activeStyle('OK')}" onclick="setLlCardFilter('OK')">
             <label>✓ Sin inconformidad</label>
             <span style="font-size:28px;font-weight:800;color:var(--jr-green)">${allRows.length - totalInc}</span>
-            <div style="font-size:10px;color:#999;margin-top:4px">${filterInc==='OK'?'🔽 Filtro activo — clic para quitar':'▶ Clic para filtrar'}</div>
+            <div style="font-size:10px;color:#999;margin-top:4px">${filterInc==='OK'?'🔽 Filtro activo':'▶ Clic para filtrar'}</div>
         </div>
         <div class="stat-card" style="border-left:4px solid #888;cursor:default">
             <label>Sin observación</label>
@@ -964,8 +938,24 @@ function renderLlamadas() {
             <td style="font-size:12px;line-height:1.5;max-width:500px">${obsHtml}</td>
         </tr>`;
     }).join('') || `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:30px">
-        ${filterInc ? '🔍 No hay registros con ese filtro' : 'No hay llamadas que coincidan con las prestaciones del reporte cargado'}
+        No hay llamadas que coincidan.
     </td></tr>`;
+}
+
+function exportar() {
+    let csvContent = "\uFEFFNo. Prestacion;Fecha Solicitud;Fallecido;Regional;Tipo;Categoria;Estado;Alertas\n";
+    resultados.forEach(r => {
+        const lineasAlertas = r._novs.map(n => n.text.replace(/;/g, ',')).join(' | ');
+        const estadoText = r._novs.length ? (r._novs.some(n=>n.type==='CRIT')?'NOVEDAD':'ALERTA TIEMPO') : 'OK';
+        csvContent += `"${r._id}";"${getCol(r,["FECHASOLICITUD"])}";"${getCol(r,["NOMBREFALLECIDO"])}";"${getCol(r,["REGIONAL"])}";"${getCol(r,["TIPO"])}";"${getCol(r,["CATEGORIA"])}";"${estadoText}";"${lineasAlertas}"\n`;
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", "Auditoria_Integral_Renacer.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 </script>
 </body>
