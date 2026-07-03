@@ -1,0 +1,720 @@
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+.app{background:#dce8f5;min-height:400px;padding:1.5rem;font-family:var(--font-sans);}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;}
+.header-logo{width:40px;height:40px;background:#1a3a5c;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+.header-logo i{font-size:22px;color:#fff;}
+.header h1{font-size:18px;font-weight:600;color:#0f2942;margin:0;}
+.header p{font-size:12px;color:#3a6898;margin:0;}
+.card-blue{background:#fff;border:1px solid #b8d4ed;border-radius:12px;padding:1.25rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(26,58,92,0.07);}
+.upload-zone{border:2px dashed #4a90d9;border-radius:10px;padding:1.75rem 1.5rem;text-align:center;cursor:pointer;transition:background 0.2s;background:#eef5fc;}
+.upload-zone:hover,.upload-zone.drag-over{background:#ddeaf8;}
+.upload-zone p{color:#2c5f8a;font-size:13px;margin-top:0.5rem;font-weight:500;}
+.upload-zone input{display:none;}
+.badge-file{display:inline-flex;align-items:center;gap:6px;margin-top:0.75rem;padding:5px 12px;border-radius:6px;font-size:12px;color:#1a3a5c;background:#dce8f5;border:1px solid #90b8d8;font-weight:500;}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:1rem;}
+.filter-group{display:flex;flex-direction:column;gap:4px;}
+.filter-group label{font-size:11px;color:#1a3a5c;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
+.filter-group input[type=date],.filter-group select{font-size:13px;background:#f5f9fd;border:1px solid #90b8d8;border-radius:6px;padding:7px 10px;color:#0f2942;outline:none;width:100%;font-weight:500;}
+.filter-group input[type=date]:focus,.filter-group select:focus{border-color:#2e7dd1;box-shadow:0 0 0 2px rgba(46,125,209,0.15);}
+.filter-group select option{background:#fff;color:#0f2942;}
+.filter-hint{font-size:10px;color:#4a7aaa;margin-top:2px;}
+.filters-extra{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.btn-main{margin-top:1rem;width:100%;padding:11px;font-size:14px;font-weight:600;border-radius:8px;border:none;background:#1a3a5c;color:#fff;cursor:pointer;transition:background 0.2s;display:none;}
+.btn-main:hover{background:#2e5f8a;}
+.btn-main:disabled{background:#90b8d8;color:#e0edf8;cursor:not-allowed;}
+.status{font-size:12px;color:#2c5f8a;margin-top:0.5rem;text-align:center;min-height:18px;font-weight:500;}
+.status.err{color:#b91c1c;}
+.progress-wrap{display:none;margin-top:0.75rem;}
+.progress-bar-bg{background:#dce8f5;border-radius:10px;height:6px;overflow:hidden;}
+.progress-bar{height:6px;background:#2e7dd1;border-radius:10px;width:0%;transition:width 0.2s;}
+.result{display:none;margin-top:1rem;}
+.fecha-badge{text-align:center;font-size:13px;font-weight:600;color:#fff;padding:8px 16px;background:#1a3a5c;border-radius:8px;margin-bottom:1rem;}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:1rem;}
+.stat{background:#fff;border:1px solid #b8d4ed;border-radius:8px;padding:0.75rem;text-align:center;box-shadow:0 1px 4px rgba(26,58,92,0.06);cursor:pointer;transition:all 0.18s;position:relative;}
+.stat:hover{border-color:#2e7dd1;box-shadow:0 4px 14px rgba(46,125,209,0.18);transform:translateY(-2px);}
+.stat.active{border-color:#2e7dd1;background:#eef5fc;box-shadow:0 0 0 2px #2e7dd1;}
+.stat .lbl{font-size:10px;color:#3a6898;margin-bottom:4px;font-weight:600;text-transform:uppercase;}
+.stat .val{font-size:20px;font-weight:700;color:#0f2942;}
+.stat .click-hint{font-size:9px;color:#90b8d8;margin-top:3px;opacity:0;transition:opacity 0.15s;}
+.stat:hover .click-hint{opacity:1;}
+/* Modal de detalle */
+.detail-overlay{display:none;position:fixed;inset:0;background:rgba(15,41,66,0.45);z-index:1000;backdrop-filter:blur(2px);}
+.detail-overlay.open{display:flex;align-items:flex-start;justify-content:center;padding:2rem 1rem;}
+.detail-panel{background:#fff;border-radius:14px;width:100%;max-width:720px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(15,41,66,0.25);overflow:hidden;}
+.detail-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;background:#1a3a5c;color:#fff;}
+.detail-header h2{font-size:15px;font-weight:700;margin:0;}
+.detail-header span{font-size:12px;color:#93b8d8;}
+.detail-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;}
+.detail-close:hover{background:rgba(255,255,255,0.15);}
+.detail-body{overflow-y:auto;padding:1rem 1.25rem;flex:1;}
+.detail-reg-title{font-size:11px;font-weight:700;color:#1a3a5c;text-transform:uppercase;letter-spacing:0.5px;padding:8px 0 4px;border-bottom:1px solid #dce8f5;margin-bottom:6px;margin-top:10px;}
+.detail-reg-title:first-child{margin-top:0;}
+.detail-item{padding:5px 8px;border-radius:6px;margin-bottom:3px;font-size:11px;line-height:1.5;color:#1a2d42;background:#f5f9fd;border-left:3px solid #b8d4ed;}
+.detail-item.is-new{border-left-color:#f59e0b;background:#fffbeb;}
+.detail-empty{color:#90b8d8;font-size:11px;padding:8px;}
+.detail-footer{padding:0.75rem 1.25rem;border-top:1px solid #dce8f5;background:#f5f9fd;font-size:11px;color:#3a6898;font-weight:600;}
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid #b8d4ed;background:#fff;}
+table.ctrl{width:100%;border-collapse:collapse;font-size:10.5px;background:#fff;}
+table.ctrl thead tr{background:#1a3a5c;}
+table.ctrl th{color:#c8dff0;font-weight:600;padding:8px 5px;text-align:center;border-bottom:1px solid #2d5a8a;font-size:10px;white-space:nowrap;}
+table.ctrl th.lft{text-align:left;}
+table.ctrl td{padding:7px 5px;border-bottom:0.5px solid #d4e5f5;vertical-align:top;font-size:10.5px;line-height:1.5;color:#1a2d42;}
+table.ctrl td.num{text-align:center;font-weight:700;color:#1a3a5c;font-size:12px;}
+table.ctrl td.det{min-width:230px;}
+table.ctrl tr:hover td{background:#eef5fc;}
+table.ctrl tr.tot td{background:#dce8f5;font-weight:700;color:#0f2942;border-top:2px solid #4a90d9;}
+.sv{display:block;margin-bottom:4px;line-height:1.4;}
+.sv-n{color:#5a8ab0;margin-right:2px;font-size:9px;font-weight:700;}
+.sv-nombre{font-weight:700;color:#0f2942;}
+.tag{display:inline-block;font-size:9px;padding:2px 5px;border-radius:3px;margin-right:2px;vertical-align:middle;font-weight:700;}
+.t-ct{background:#bfdbfe;color:#1e3a8a;}
+.t-cte{background:#a5f3fc;color:#0e7490;}
+.t-cv{background:#a7f3d0;color:#065f46;}
+.t-ms{background:#fbcfe8;color:#9d174d;}
+.t-new{background:#fef08a;color:#854d0e;}
+.t-snp{background:#fecaca;color:#991b1b;}
+.t-lic{background:#ddd6fe;color:#5b21b6;}
+.t-part{background:#bae6fd;color:#0369a1;}
+.t-cond{background:#fde68a;color:#92400e;}
+.na{color:#90b8d8;font-size:10px;}
+.action-row{display:flex;gap:8px;margin-top:0.75rem;flex-wrap:wrap;}
+.btn-copy{padding:8px 16px;font-size:12px;border-radius:8px;border:1px solid #90b8d8;background:#dce8f5;color:#1a3a5c;cursor:pointer;display:flex;align-items:center;gap:6px;font-weight:600;}
+.btn-copy:hover{background:#b8d4ed;color:#0f2942;}
+.btn-export{padding:8px 16px;font-size:12px;border-radius:8px;border:1px solid #1a3a5c;background:#1a3a5c;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;font-weight:600;}
+.btn-export:hover{background:#2e5f8a;}
+.btn-export:disabled{opacity:0.5;cursor:not-allowed;}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:0.75rem;}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:#1a3a5c;font-weight:600;}
+/* Vista parcial: ocultar columnas cuando el filtro de vista está activo */
+.hide-culmina .col-culmina-num,.hide-culmina .col-culmina-det{display:none;}
+.hide-curso .col-curso-num,.hide-curso .col-curso-det{display:none;}
+.hide-novedad .col-novedad-num,.hide-novedad .col-novedad-det{display:none;}
+table.ctrl th.col-novedad-det{color:#d97706;}
+.t-nov{background:#fef3c7;color:#92400e;}
+</style>
+
+<div class="app">
+  <div class="header">
+    <div class="header-logo"><i class="ti ti-leaf" aria-hidden="true"></i></div>
+    <div>
+      <h1>Control Diario de Servicios</h1>
+      <p>Jardines del Renacer</p>
+    </div>
+  </div>
+
+  <div class="card-blue">
+    <div class="upload-zone" id="dz" onclick="document.getElementById('fi').click()">
+      <i class="ti ti-upload" style="font-size:26px;color:#4a90d9;" aria-hidden="true"></i>
+      <p>Haz clic o arrastra el archivo aquí</p>
+      <p style="font-size:11px;margin-top:2px;">Soporta: .csv, .xlsx, .xls</p>
+      <input type="file" id="fi" accept=".csv,.xlsx,.xls,.CSV">
+    </div>
+    <div id="fbadge"></div>
+
+    <div class="filters">
+      <div class="filter-group">
+        <label for="fdate">Fecha de digitación / reporte</label>
+        <input type="date" id="fdate">
+        <span class="filter-hint">Servicios digitados hasta este día</span>
+      </div>
+      <div class="filter-group">
+        <label for="fsalida">Fecha de salida</label>
+        <input type="date" id="fsalida">
+        <span class="filter-hint">Servicios que finalizan este día</span>
+      </div>
+    </div>
+
+    <div class="filters-extra">
+      <div class="filter-group">
+        <label for="fregional">Regional</label>
+        <select id="fregional">
+          <option value="">— Todas las regionales —</option>
+        </select>
+        <span class="filter-hint">Filtrar por una regional específica</span>
+      </div>
+      <div class="filter-group">
+        <label for="fvista">Vista</label>
+        <select id="fvista">
+          <option value="ambos">Culminan + En Curso + Novedades</option>
+          <option value="culminan">Solo Culminan</option>
+          <option value="curso">Solo En Curso</option>
+          <option value="novedad">Solo Novedades</option>
+        </select>
+        <span class="filter-hint">Mostrar solo un tipo de servicio</span>
+      </div>
+    </div>
+
+    <button class="btn-main" id="btn">Generar tabla de control</button>
+    <div class="progress-wrap" id="pw"><div class="progress-bar-bg"><div class="progress-bar" id="pb"></div></div></div>
+    <div class="status" id="st"></div>
+  </div>
+
+  <div class="result" id="result">
+    <div id="exportArea">
+      <div class="fecha-badge" id="ftit"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="tag t-ct">CT</span> Cobertura total</div>
+        <div class="legend-item"><span class="tag t-cte">CTE</span> Con excedente</div>
+        <div class="legend-item"><span class="tag t-cv">CONV</span> Convenio</div>
+        <div class="legend-item"><span class="tag t-ms">MASC</span> Mascota</div>
+        <div class="legend-item"><span class="tag t-lic">LIC</span> Licitación</div>
+        <div class="legend-item"><span class="tag t-part">PART</span> Particular</div>
+        <div class="legend-item"><span class="tag t-cond">COND</span> Condicional</div>
+        <div class="legend-item"><span class="tag t-new">NUEVO</span> Ingresa hoy</div>
+        <div class="legend-item"><span class="tag t-nov">NOV</span> Sin fecha de salida</div>
+      </div>
+      <div class="stats-grid" id="sgrid"></div>
+      <div class="tbl-wrap"><table class="ctrl" id="ctbl"></table></div>
+    </div>
+    <div class="action-row">
+      <button class="btn-copy" onclick="copyTbl()"><i class="ti ti-copy" style="font-size:13px;" aria-hidden="true"></i> Copiar tabla</button>
+      <button class="btn-export" id="btnPdf" onclick="exportPDF()"><i class="ti ti-file-type-pdf" style="font-size:13px;" aria-hidden="true"></i> Exportar PDF</button>
+      <button class="btn-export" id="btnPng" onclick="exportPNG()"><i class="ti ti-photo" style="font-size:13px;" aria-hidden="true"></i> Exportar imagen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de detalle al hacer clic en stat -->
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
+  <div class="detail-panel">
+    <div class="detail-header">
+      <div>
+        <h2 id="detailTitle">Detalle</h2>
+        <span id="detailSub"></span>
+      </div>
+      <button class="detail-close" onclick="closeDetailBtn()">&#x2715;</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+    <div class="detail-footer" id="detailFooter"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const dz=document.getElementById('dz'),fi=document.getElementById('fi'),btn=document.getElementById('btn'),st=document.getElementById('st'),pw=document.getElementById('pw'),pb=document.getElementById('pb');
+let allRows=[];
+
+const today=new Date();
+const todayStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+document.getElementById('fdate').value=todayStr;
+document.getElementById('fsalida').value=todayStr;
+
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');loadFile(e.dataTransfer.files[0]);});
+fi.addEventListener('change',e=>loadFile(e.target.files[0]));
+
+function setErr(msg){ st.textContent=msg; st.classList.add('err'); }
+function setOk(msg){ st.textContent=msg; st.classList.remove('err'); }
+
+function loadFile(file){
+  if(!file)return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  document.getElementById('fbadge').innerHTML=`<div class="badge-file"><i class="ti ti-file" style="font-size:13px;" aria-hidden="true"></i>${file.name} (${(file.size/1024/1024).toFixed(2)} MB)</div>`;
+  btn.style.display='block'; btn.disabled=true;
+  pw.style.display='block'; pb.style.width='5%';
+  setOk('Leyendo archivo... 0%');
+  allRows=[];
+
+  try{
+    if(ext==='csv') readCSVStream(file);
+    else readXLSX(file);
+  }catch(err){
+    setErr('Error al iniciar lectura: '+err.message);
+  }
+}
+
+function detectDelimiter(sampleLine){
+  const counts = {
+    ',': (sampleLine.match(/,/g)||[]).length,
+    ';': (sampleLine.match(/;/g)||[]).length,
+    '\t': (sampleLine.match(/\t/g)||[]).length
+  };
+  let best=',', bestCount=counts[','];
+  for(const d of [';','\t']){ if(counts[d]>bestCount){best=d;bestCount=counts[d];} }
+  return best;
+}
+
+async function readCSVStream(file){
+  try{
+    const headSlice = file.slice(0, Math.min(65536, file.size));
+    const headBuf = await headSlice.arrayBuffer();
+    const headBytes = new Uint8Array(headBuf);
+
+    let encoding = 'utf-8';
+    let testOk = true;
+    try{ new TextDecoder('utf-8', {fatal:true}).decode(headBytes); }catch(e){ testOk = false; }
+    if(!testOk) encoding = 'windows-1252';
+
+    const headText = new TextDecoder(encoding).decode(headBytes);
+    const firstLine = headText.split('\n')[0];
+    const delim = detectDelimiter(firstLine);
+
+    const decoder = new TextDecoder(encoding);
+    const CHUNK = 2 * 1024 * 1024;
+    const total = file.size;
+    let offset = 0;
+    let header = null;
+    let carry = '';
+    let rowCount = 0;
+    let lastUpdate = Date.now();
+
+    while(offset < total){
+      const slice = file.slice(offset, offset + CHUNK);
+      const buf = await slice.arrayBuffer();
+      const text = carry + decoder.decode(buf, {stream:true});
+      const lines = text.split('\n');
+      carry = lines.pop();
+
+      for(let li=0; li<lines.length; li++){
+        const line = lines[li];
+        if(!line.trim()) continue;
+        const cols = parseCSVLine(line, delim);
+        if(!header){ header = cols.map(h=>h.replace(/^\uFEFF/,'').trim()); continue; }
+        const row = {};
+        for(let i=0;i<header.length;i++) row[header[i]] = (cols[i]||'').trim();
+        if(row['NUMEROPRESTACION'] && row['NUMEROPRESTACION']!=='NUMEROPRESTACION' && row['REGIONAL'] && row['REGIONAL']!=='REGIONAL'){
+          allRows.push(row);
+          rowCount++;
+        }
+      }
+
+      offset += CHUNK;
+      const pct = Math.min(99, Math.round((offset/total)*100));
+      pb.style.width = pct+'%';
+      if(Date.now()-lastUpdate > 150){
+        setOk(`Leyendo archivo... ${pct}% (${rowCount.toLocaleString()} registros)`);
+        lastUpdate = Date.now();
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+
+    if(carry.trim() && header){
+      const cols = parseCSVLine(carry, delim);
+      const row = {};
+      for(let i=0;i<header.length;i++) row[header[i]] = (cols[i]||'').trim();
+      if(row['NUMEROPRESTACION'] && row['REGIONAL']) allRows.push(row);
+    }
+
+    pb.style.width='100%';
+
+    if(allRows.length === 0){
+      setErr('No se encontraron registros válidos. Verifica que el archivo tenga las columnas NUMEROPRESTACION y REGIONAL.');
+      return;
+    }
+
+    setOk(`Listo: ${allRows.length.toLocaleString()} registros cargados.`);
+    populateRegionalFilter();
+    btn.disabled=false;
+  }catch(err){
+    setErr('Error leyendo CSV: '+err.message);
+    console.error(err);
+  }
+}
+
+function parseCSVLine(line, delim){
+  const res=[];let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;}else if(c===delim&&!inQ){res.push(cur);cur='';}else cur+=c;
+  }
+  res.push(cur);return res;
+}
+
+function readXLSX(file){
+  const fr=new FileReader();
+  fr.onerror=()=>setErr('Error al leer el archivo Excel.');
+  fr.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',raw:false});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const json=XLSX.utils.sheet_to_json(ws,{defval:''});
+      allRows=json.filter(r=>r['NUMEROPRESTACION']&&r['NUMEROPRESTACION']!=='NUMEROPRESTACION'&&r['REGIONAL']&&r['REGIONAL']!=='REGIONAL');
+      pb.style.width='100%';
+      if(allRows.length === 0){
+        setErr('No se encontraron registros válidos en el Excel.');
+        return;
+      }
+      setOk(`Listo: ${allRows.length.toLocaleString()} registros.`);
+      populateRegionalFilter();
+      btn.disabled=false;
+    }catch(err){
+      setErr('Error procesando el Excel: '+err.message);
+    }
+  };
+  fr.readAsArrayBuffer(file);
+}
+
+// Llena el select de regionales con los valores únicos del archivo
+function populateRegionalFilter(){
+  const ORDER=['RISARALDA','QUINDIO','CALDAS','ANTIOQUIA','VALLE CENTRO','VALLE NORTE','VALLE SUR','VALLE CENTRO-PALMIRA','CUNDINAMARCA','TOLIMA NORTE','TOLIMA SUR','ATLANTICO','HUILA','CAUCA','SANTANDER','BOGOTA','PUTUMAYO','META','OPERACION NACIONAL'];
+  const found = new Set();
+  allRows.forEach(r=>{
+    const reg = String(r['REGIONAL']||'').trim().toUpperCase();
+    if(reg && reg !== 'REGIONAL') found.add(reg);
+  });
+  const sorted = [...ORDER.filter(r=>found.has(r)), ...[...found].filter(r=>!ORDER.includes(r)).sort()];
+  const sel = document.getElementById('fregional');
+  sel.innerHTML = '<option value="">— Todas las regionales —</option>';
+  sorted.forEach(reg=>{
+    const o = document.createElement('option');
+    o.value = reg; o.textContent = reg;
+    sel.appendChild(o);
+  });
+}
+
+btn.addEventListener('click',()=>{
+  const fv=document.getElementById('fdate').value;
+  const fs=document.getElementById('fsalida').value;
+  if(!fv||!fs){setErr('Completa ambas fechas.');return;}
+  if(!allRows.length){setErr('Carga un archivo primero.');return;}
+  btn.disabled=true; setOk('Procesando...');
+  setTimeout(()=>{buildTable(fv,fs);btn.disabled=false;},50);
+});
+
+function normDate(val){
+  if(val===null||val===undefined)return null;
+  let s=String(val).trim();
+  if(!s || s.toLowerCase()==='nan' || s.toLowerCase()==='n/a') return null;
+  const ms={'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12};
+  let m;
+  m=s.match(/^(\d{1,2})\s*-\s*([a-záéíóúA-ZÁÉÍÓÚ]{3})[^-\d]*-\s*(\d{2,4})/);
+  if(m){
+    const y=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);
+    const mo=ms[m[2].toLowerCase().substr(0,3)];
+    if(mo)return new Date(y,mo-1,parseInt(m[1]));
+  }
+  m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if(m)return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]));
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m)return new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1]));
+  return null;
+}
+
+function sameDay(a,b){return a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function num(v){ const n = parseFloat(String(v||'0').replace(/[^0-9.-]/g,'')); return isNaN(n)?0:n; }
+
+function clean(s){
+  s = String(s||'').trim();
+  if(!s || s.toLowerCase()==='nan' || s.toLowerCase()==='n/a') return '';
+  s = s.replace(/^N\/a[\-\/]*\s*/i,'').replace(/[\-\/]*N\/a$/i,'');
+  return s.trim().replace(/^[-\/]+|[-\/]+$/g,'').trim();
+}
+
+function tipoServicio(r){
+  const t=String(r['TIPO']||'').trim().toLowerCase();
+  const excedente = num(r['EXCEDENTES']);
+  if(t==='afiliado cobertura total'){
+    return excedente>0 ? 'CTE' : 'CT';
+  }
+  if(t==='convenio')return'CONV';
+  if(t==='mascota')return'MASC';
+  if(t==='licitacion'||t==='licitación')return'LIC';
+  if(t==='particular')return'PART';
+  if(t==='afiliado condicional')return'COND';
+  if(t==='servicios no prestados')return'SNP';
+  return'OTRO';
+}
+function tagHtml(tipo){
+  if(tipo==='CONV')return'<span class="tag t-cv">CONV</span>';
+  if(tipo==='MASC')return'<span class="tag t-ms">MASC</span>';
+  if(tipo==='CTE')return'<span class="tag t-cte">CTE</span>';
+  if(tipo==='LIC')return'<span class="tag t-lic">LIC</span>';
+  if(tipo==='PART')return'<span class="tag t-part">PART</span>';
+  if(tipo==='COND')return'<span class="tag t-cond">COND</span>';
+  if(tipo==='SNP')return'<span class="tag t-snp">SNP</span>';
+  if(tipo==='CT')return'<span class="tag t-ct">CT</span>';
+  return'<span class="tag t-ct">'+tipo+'</span>';
+}
+
+function fmtRow(r,i,isNew){
+  const num2=clean(r['NUMEROPRESTACION']);
+  const nombre=clean(r['NOMBREFALLECIDO']);
+  const sala=clean(r['SALAVELACION']);
+  const sede=clean(r['SEDE']);
+  const hora=clean(r['HORASALIDA'])||clean(r['HORAENTRADA'])||clean(r['HORAEXEQUIAS']);
+  const dest=clean(r['DESTINOFINAL']);
+  const loc=sala||sede;
+  const newTag=isNew?'<span class="tag t-new">NUEVO</span>':'';
+  const nombreHtml = nombre ? `<span class="sv-nombre">${nombre}</span> ` : '';
+  return`<span class="sv"><span class="sv-n">${i+1}-</span>${newTag}${tagHtml(tipoServicio(r))} ${num2} ${nombreHtml}${loc?'- '+loc:''}${hora?' - '+hora:''}${dest?' - DF '+dest:''}</span>`;
+}
+
+function buildTable(fv,fs){
+  const refReporte=new Date(fv+'T00:00:00');   // fecha de digitación/reporte
+  const refSalida=new Date(fs+'T00:00:00');     // fecha de salida buscada
+  const regFiltro = document.getElementById('fregional').value.trim().toUpperCase();
+  const vista = document.getElementById('fvista').value; // 'ambos' | 'culminan' | 'curso'
+
+  const ORDER=['RISARALDA','QUINDIO','CALDAS','ANTIOQUIA','VALLE CENTRO','VALLE NORTE','VALLE SUR','VALLE CENTRO-PALMIRA','CUNDINAMARCA','TOLIMA NORTE','TOLIMA SUR','ATLANTICO','HUILA','CAUCA','SANTANDER','BOGOTA','PUTUMAYO','META','OPERACION NACIONAL'];
+  const map={};
+
+  allRows.forEach(r=>{
+    let reg=String(r['REGIONAL']||'').trim().toUpperCase();
+    if(!reg||reg==='REGIONAL')return;
+    // Filtro por regional
+    if(regFiltro && reg !== regFiltro) return;
+
+    const fDig = normDate(r['FECHADIGITACION']);  // cuando se crea el servicio
+    const fEnt = normDate(r['FECHAENTRADA']);      // cuando entra a sala
+    const fSal = normDate(r['FECHASALIDA']);       // cuando sale / culmina
+
+    // ── LÓGICA DE INCLUSIÓN ──────────────────────────────────────────────────
+    // Un registro existe si tiene al menos FECHADIGITACION
+    // y esa fecha es <= fecha de reporte seleccionada.
+    // Si no hay FECHADIGITACION, usamos FECHAENTRADA como respaldo (compatibilidad).
+    const fechaBase = fDig || fEnt;
+    if(!fechaBase || fechaBase > refReporte) return;
+
+    // ── CLASIFICACIÓN ────────────────────────────────────────────────────────
+    // CULMINA: tiene FECHASALIDA y es igual a la fecha de salida seleccionada
+    // EN CURSO: (a) tiene FECHAENTRADA pero sin FECHASALIDA
+    //           (b) tiene solo FECHADIGITACION (digitado, aún no en sala)
+    const esCulmina = fSal && sameDay(fSal, refSalida);
+    const tieneFechaSalida = !!(r['FECHASALIDA']||'').trim();
+    const esEnCurso = !tieneFechaSalida; // En Curso solo si la celda FECHASALIDA está realmente vacía
+
+    if(!map[reg])map[reg]={c:[],e:[],n:[]};
+
+    if(esCulmina){
+      // "ingresa hoy" para culmina: usamos fDig o fEnt comparado con refReporte
+      map[reg].c.push({row:r,isNew:sameDay(fechaBase,refReporte)});
+    } else if(esEnCurso){
+      // Sin FECHASALIDA → Novedad (pendiente/sin datos de salida)
+      const fechaIngreso = fEnt || fDig;
+      map[reg].n.push({row:r,isNew:sameDay(fechaIngreso,refReporte)});
+    } else {
+      // Tiene FECHASALIDA pero no coincide con refSalida → En Curso confirmado
+      const fechaIngreso = fEnt || fDig;
+      map[reg].e.push({row:r,isNew:sameDay(fechaIngreso,refReporte)});
+    }
+  });
+
+  // Construir lista de regionales respetando el orden
+  let regs;
+  if(regFiltro){
+    regs = map[regFiltro] ? [regFiltro] : [];
+  } else {
+    regs=[...ORDER.filter(r=>map[r]),...Object.keys(map).filter(r=>!ORDER.includes(r))];
+  }
+
+  let tc=0,te=0,tn=0,tmasc=0,tconv=0,tnew=0;
+
+  // Columnas dinámicas según vista
+  const showCulmina = vista !== 'curso' && vista !== 'novedad';
+  const showCurso   = vista !== 'culminan' && vista !== 'novedad';
+  const showNovedad = vista !== 'culminan' && vista !== 'curso';
+
+  let thCols = `<th class="lft" style="width:88px;">REGIONAL</th>`;
+  if(showCulmina) thCols += `<th class="col-culmina-num" style="width:42px;">CULMINA</th>`;
+  if(showCurso)   thCols += `<th class="col-curso-num"   style="width:42px;">CURSO</th>`;
+  thCols += `<th style="width:42px;">MASC.</th><th style="width:42px;">CONV.</th>`;
+  if(showCulmina) thCols += `<th class="lft col-culmina-det" style="background:#7f1d1d;color:#fff;">CULMINAN</th>`;
+  if(showCurso)   thCols += `<th class="lft col-curso-det"   style="background:#1e3a8a;color:#fff;">EN CURSO</th>`;
+  if(vista==='novedad') thCols += `<th class="lft" style="color:#d97706;">NOVEDADES (sin fecha de salida)</th>`;
+
+  let html=`<thead><tr>${thCols}</tr></thead><tbody>`;
+
+  regs.forEach(reg=>{
+    const rm=map[reg];if(!rm)return;
+    // Calcular masc y conv directamente desde las filas visibles (según vista)
+    const visibles = vista==='novedad' ? [...rm.n] : [...(showCulmina?rm.c:[]), ...(showCurso?rm.e:[])];
+    const regMasc = visibles.filter(x=>tipoServicio(x.row)==='MASC').length;
+    const regConv = visibles.filter(x=>tipoServicio(x.row)==='CONV').length;
+    tc+=rm.c.length;te+=rm.e.length;tn+=rm.n.length;
+    tmasc+=regMasc;tconv+=regConv;
+    tnew+=rm.e.filter(x=>x.isNew).length + rm.c.filter(x=>x.isNew).length + rm.n.filter(x=>x.isNew).length;
+    const cH=rm.c.length?rm.c.map((x,i)=>fmtRow(x.row,i,x.isNew)).join(''):'<span class="na">N/a</span>';
+    const eH=rm.e.length?rm.e.map((x,i)=>fmtRow(x.row,i,x.isNew)).join(''):'<span class="na">N/a</span>';
+    const nH=rm.n.length?rm.n.map((x,i)=>fmtRow(x.row,i,x.isNew)).join(''):'<span class="na">N/a</span>';
+    let tdCols = `<td style="font-weight:500;font-size:11px;">${reg}</td>`;
+    if(showCulmina) tdCols += `<td class="num col-culmina-num">${rm.c.length}</td>`;
+    if(showCurso)   tdCols += `<td class="num col-curso-num">${rm.e.length}</td>`;
+    tdCols += `<td class="num">${regMasc||''}</td><td class="num">${regConv||''}</td>`;
+    if(showCulmina) tdCols += `<td class="det col-culmina-det">${cH}</td>`;
+    if(showCurso)   tdCols += `<td class="det col-curso-det">${eH}</td>`;
+    if(vista==='novedad') tdCols += `<td class="det">${nH}</td>`;
+    html+=`<tr>${tdCols}</tr>`;
+  });
+
+  // Totales
+  let tfCols = `<td>TOTALES</td>`;
+  if(showCulmina) tfCols += `<td class="num col-culmina-num">${tc}</td>`;
+  if(showCurso)   tfCols += `<td class="num col-curso-num">${te}</td>`;
+  tfCols += `<td class="num">${tmasc}</td><td class="num">${tconv}</td>`;
+  const span = (showCulmina?1:0)+(showCurso?1:0);
+  tfCols += `<td colspan="${Math.max(span,1)}" style="text-align:center;font-size:10px;">Ingresan hoy: ${tnew} &nbsp;·&nbsp; Culminan: ${tc} &nbsp;·&nbsp; En Curso: ${te} &nbsp;·&nbsp; Novedades: ${tn}</td>`;
+
+  html+=`</tbody><tfoot><tr class="tot">${tfCols}</tr></tfoot>`;
+
+  document.getElementById('ctbl').innerHTML=html;
+
+  // Guardar datos para modal de detalle
+  window.__statData = { map, regs, refReporte, refSalida };
+
+  // Stats cards: mostrar solo las relevantes
+  let statsHtml = '';
+  if(showCulmina) statsHtml += `<div class="stat" onclick="openDetail('culmina')" title="Ver detalle de Culmina"><div class="lbl">Culmina</div><div class="val">${tc}</div><div class="click-hint">Ver detalle ↗</div></div>`;
+  if(showCurso)   statsHtml += `<div class="stat" onclick="openDetail('curso')" title="Ver detalle de En Curso"><div class="lbl">Curso</div><div class="val">${te}</div><div class="click-hint">Ver detalle ↗</div></div>`;
+  
+  statsHtml += `
+    <div class="stat" onclick="openDetail('mascota')" title="Ver servicios de Mascota"><div class="lbl">Mascota</div><div class="val">${tmasc}</div><div class="click-hint">Ver detalle ↗</div></div>
+    <div class="stat" onclick="openDetail('convenio')" title="Ver servicios de Convenio"><div class="lbl">Convenio</div><div class="val">${tconv}</div><div class="click-hint">Ver detalle ↗</div></div>
+    <div class="stat" onclick="openDetail('total')" title="Ver todos los servicios activos"><div class="lbl">Total</div><div class="val">${tc+te}</div><div class="click-hint">Ver detalle ↗</div></div>`;
+  document.getElementById('sgrid').innerHTML=statsHtml;
+  // Ajustar grid según cantidad de stats
+  const nStats = (showCulmina?1:0)+(showCurso?1:0)+3;
+  document.getElementById('sgrid').style.gridTemplateColumns=`repeat(${nStats},1fr)`;
+
+  const fmt=d=>d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
+  window.__fechaActual = fmt(refReporte).replace(/\//g,'-');
+  const regionalLabel = regFiltro ? ` · ${regFiltro}` : '';
+  const vistaLabel = vista==='culminan' ? ' · Solo Culminan' : vista==='curso' ? ' · Solo En Curso' : '';
+  document.getElementById('ftit').textContent=`Reporte: ${fmt(refReporte)}  ·  Salidas: ${fmt(refSalida)}${regionalLabel}${vistaLabel}`;
+  document.getElementById('result').style.display='block';
+
+  if(regs.length === 0){
+    setErr('No hay servicios para esa fecha y filtros. Verifica las fechas o cambia el filtro de regional.');
+  } else {
+    setOk(`${regs.length} regional(es) · Culmina:${tc} Curso:${te} Novedades:${tn} Mascota:${tmasc} Conv:${tconv}`);
+  }
+  pb.style.width='100%';
+}
+
+function copyTbl(){
+  const rows=document.querySelectorAll('#ctbl tr');
+  let txt='';
+  rows.forEach(tr=>{txt+=[...tr.querySelectorAll('th,td')].map(td=>td.innerText.replace(/\n/g,' ').trim()).join('\t')+'\n';});
+  navigator.clipboard.writeText(txt).then(()=>{
+    const b=document.querySelector('.btn-copy');b.innerHTML='<i class="ti ti-check" style="font-size:13px;"></i> Copiado';
+    setTimeout(()=>{b.innerHTML='<i class="ti ti-copy" style="font-size:13px;"></i> Copiar tabla';},2000);
+  });
+}
+
+async function exportPNG(){
+  const btnPng = document.getElementById('btnPng');
+  btnPng.disabled = true;
+  btnPng.innerHTML = '<i class="ti ti-loader-2" style="font-size:13px;"></i> Generando...';
+  try{
+    const el = document.getElementById('exportArea');
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#1a3a5c', useCORS: true });
+    const link = document.createElement('a');
+    link.download = `control_renacer_${window.__fechaActual||'reporte'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }catch(err){
+    alert('Error al exportar imagen: '+err.message);
+  }
+  btnPng.disabled = false;
+  btnPng.innerHTML = '<i class="ti ti-photo" style="font-size:13px;"></i> Exportar imagen';
+}
+
+function openDetail(tipo){
+  const {map, regs, refReporte, refSalida} = window.__statData || {};
+  if(!map) return;
+
+  const titles = {
+    culmina:  'Servicios que Culminan',
+    curso:    'Servicios En Curso',
+    novedad:  'Novedades — Sin fecha de salida',
+    mascota:  'Servicios Mascota',
+    convenio: 'Servicios Convenio',
+    total:    'Todos los Servicios (Culmina + Curso + Novedades)'
+  };
+
+  // Marcar card activa
+  document.querySelectorAll('.stat').forEach(s=>s.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  // Filtrar registros según tipo
+  const fmt2 = d => d ? d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'}) : '';
+  let bodyHtml = '';
+  let totalItems = 0;
+
+  regs.forEach(reg => {
+    const rm = map[reg]; if(!rm) return;
+    let items = [];
+
+    if(tipo === 'culmina'){
+      items = rm.c;
+    } else if(tipo === 'curso'){
+      items = rm.e;
+    } else if(tipo === 'novedad'){
+      items = rm.n;
+    } else if(tipo === 'mascota'){
+      items = [...rm.c, ...rm.e, ...rm.n].filter(x => tipoServicio(x.row) === 'MASC');
+    } else if(tipo === 'convenio'){
+      items = [...rm.c, ...rm.e, ...rm.n].filter(x => tipoServicio(x.row) === 'CONV');
+    } else if(tipo === 'total'){
+      items = [...rm.c, ...rm.e, ...rm.n];
+    }
+
+    if(!items.length) return;
+    totalItems += items.length;
+
+    bodyHtml += `<div class="detail-reg-title">${reg} <span style="font-weight:400;color:#5a8ab0;">(${items.length})</span></div>`;
+    items.forEach((x, i) => {
+      const r = x.row;
+      const nombre = clean(r['NOMBREFALLECIDO']);
+      const num2   = clean(r['NUMEROPRESTACION']);
+      const sala   = clean(r['SALAVELACION']) || clean(r['SEDE']);
+      const hora   = clean(r['HORASALIDA']) || clean(r['HORAENTRADA']) || clean(r['HORAEXEQUIAS']);
+      const dest   = clean(r['DESTINOFINAL']);
+      const newBadge = x.isNew ? '<span style="background:#fef08a;color:#854d0e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:4px;">NUEVO</span>' : '';
+      bodyHtml += `<div class="detail-item${x.isNew?' is-new':''}">
+        ${newBadge}${tagHtml(tipoServicio(r))}
+        <strong style="color:#1a3a5c;">${num2}</strong>
+        ${nombre ? `· <span style="font-weight:700;">${nombre}</span>` : ''}
+        ${sala ? `· ${sala}` : ''}
+        ${hora ? `· <span style="color:#2e7dd1;font-weight:600;">${hora}</span>` : ''}
+        ${dest ? `· DF: ${dest}` : ''}
+      </div>`;
+    });
+  });
+
+  if(!bodyHtml) bodyHtml = '<div class="detail-empty">No hay servicios para mostrar.</div>';
+
+  document.getElementById('detailTitle').textContent = titles[tipo] || 'Detalle';
+  document.getElementById('detailSub').textContent   = `Reporte: ${fmt2(refReporte)}  ·  Salida: ${fmt2(refSalida)}`;
+  document.getElementById('detailBody').innerHTML    = bodyHtml;
+  document.getElementById('detailFooter').textContent = `Total: ${totalItems} servicio(s)`;
+  document.getElementById('detailOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDetail(e){
+  if(e.target === document.getElementById('detailOverlay')) closeDetailBtn();
+}
+function closeDetailBtn(){
+  document.getElementById('detailOverlay').classList.remove('open');
+  document.querySelectorAll('.stat').forEach(s=>s.classList.remove('active'));
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDetailBtn(); });
+
+async function exportPDF(){
+  const btnPdf = document.getElementById('btnPdf');
+  btnPdf.disabled = true;
+  btnPdf.innerHTML = '<i class="ti ti-loader-2" style="font-size:13px;"></i> Generando...';
+  try{
+    const el = document.getElementById('exportArea');
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#1a3a5c', useCORS: true });
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pxToMm = px => px * 0.264583;
+    const widthMm = pxToMm(canvas.width / 2);
+    const heightMm = pxToMm(canvas.height / 2);
+    const orientation = widthMm > heightMm ? 'landscape' : 'portrait';
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: [widthMm, heightMm] });
+    pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
+    pdf.save(`control_renacer_${window.__fechaActual||'reporte'}.pdf`);
+  }catch(err){
+    alert('Error al exportar PDF: '+err.message);
+  }
+  btnPdf.disabled = false;
+  btnPdf.innerHTML = '<i class="ti ti-file-type-pdf" style="font-size:13px;"></i> Exportar PDF';
+}
+</script>
